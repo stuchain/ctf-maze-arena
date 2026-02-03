@@ -1,0 +1,7 @@
+# Commit plan and phase docs (implementation guide — keep local)
+docs/commit/
+
+
+# Added by cargo
+
+/target
