@@ -1,3 +1,5 @@
+mod maze;
+
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
