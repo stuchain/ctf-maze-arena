@@ -123,6 +123,56 @@ impl Walls {
     }
 }
 
+/// Maze: grid + walls + start and goal cells.
+pub struct Maze {
+    pub grid: Grid,
+    pub walls: Walls,
+    pub start: Cell,
+    pub goal: Cell,
+}
+
+impl Maze {
+    pub fn new(width: usize, height: usize) -> Self {
+        let grid = Grid::new(width, height);
+        let walls = Walls::new();
+        let start = Cell::new(0, 0);
+        let goal = Cell::new(width.saturating_sub(1), height.saturating_sub(1));
+        Self {
+            grid,
+            walls,
+            start,
+            goal,
+        }
+    }
+
+    pub fn in_bounds(&self, cell: Cell) -> bool {
+        cell.x < self.grid.width && cell.y < self.grid.height
+    }
+
+    /// Neighbors reachable without crossing a wall. Order: E, S, W, N.
+    pub fn neighbors(&self, cell: Cell) -> Vec<Cell> {
+        let mut out = Vec::with_capacity(4);
+        let (w, h) = (self.grid.width, self.grid.height);
+        // East
+        if cell.x + 1 < w && !self.walls.has_wall(cell, Cell::new(cell.x + 1, cell.y)) {
+            out.push(Cell::new(cell.x + 1, cell.y));
+        }
+        // South
+        if cell.y + 1 < h && !self.walls.has_wall(cell, Cell::new(cell.x, cell.y + 1)) {
+            out.push(Cell::new(cell.x, cell.y + 1));
+        }
+        // West
+        if cell.x > 0 && !self.walls.has_wall(cell, Cell::new(cell.x - 1, cell.y)) {
+            out.push(Cell::new(cell.x - 1, cell.y));
+        }
+        // North
+        if cell.y > 0 && !self.walls.has_wall(cell, Cell::new(cell.x, cell.y - 1)) {
+            out.push(Cell::new(cell.x, cell.y - 1));
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,5 +201,26 @@ mod tests {
         w.set_wall(Cell::new(0, 0), Cell::new(1, 0), true);
         assert!(w.has_wall(Cell::new(0, 0), Cell::new(1, 0)));
         assert!(w.has_wall(Cell::new(1, 0), Cell::new(0, 0)));
+    }
+
+    #[test]
+    fn maze_in_bounds() {
+        let maze = Maze::new(5, 5);
+        assert!(maze.in_bounds(Cell::new(0, 0)));
+        assert!(maze.in_bounds(Cell::new(4, 4)));
+        assert!(!maze.in_bounds(Cell::new(5, 5)));
+        assert!(!maze.in_bounds(Cell::new(5, 0)));
+        assert!(!maze.in_bounds(Cell::new(0, 5)));
+    }
+
+    #[test]
+    fn maze_neighbors_empty_walls() {
+        let maze = Maze::new(5, 5);
+        // Center cell: all 4 directions are passages → 4 neighbors
+        let center = Cell::new(2, 2);
+        assert_eq!(maze.neighbors(center).len(), 4);
+        // Corner (0,0): only east and south → 2 neighbors
+        let corner = Cell::new(0, 0);
+        assert_eq!(maze.neighbors(corner).len(), 2);
     }
 }
