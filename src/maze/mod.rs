@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
+pub mod gen;
+
 /// Cell coordinate. (row, col) or (y, x) — pick one and stick to it.
 /// Using (x, y) for consistency with JSON [x,y] arrays.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -135,6 +137,22 @@ impl Maze {
     pub fn new(width: usize, height: usize) -> Self {
         let grid = Grid::new(width, height);
         let walls = Walls::new();
+        let start = Cell::new(0, 0);
+        let goal = Cell::new(width.saturating_sub(1), height.saturating_sub(1));
+        Self {
+            grid,
+            walls,
+            start,
+            goal,
+        }
+    }
+
+    pub fn with_all_walls(width: usize, height: usize) -> Self {
+        let grid = Grid::new(width, height);
+        let mut walls = Walls::new();
+        for edge in Walls::all_edges(width, height) {
+            walls.set_wall(edge.0, edge.1, true);
+        }
         let start = Cell::new(0, 0);
         let goal = Cell::new(width.saturating_sub(1), height.saturating_sub(1));
         Self {
