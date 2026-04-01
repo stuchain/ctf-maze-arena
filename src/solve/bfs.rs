@@ -67,3 +67,33 @@ fn reconstruct_path(parent: &HashMap<Cell, Cell>, start: Cell, goal: Cell) -> Ve
     path
 }
 
+#[cfg(test)]
+mod tests {
+    use super::BfsSolver;
+    use crate::maze::{generate, GeneratorAlgo, Maze};
+    use crate::solve::Solver;
+
+    #[test]
+    fn bfs_path_valid() {
+        let maze = generate(5, 5, 42, GeneratorAlgo::Kruskal);
+        let result = BfsSolver.solve(&maze);
+        assert!(!result.path.is_empty());
+        assert_eq!(result.path[0], maze.start);
+        assert_eq!(result.path.last().copied(), Some(maze.goal));
+        for i in 1..result.path.len() {
+            let (a, b) = (result.path[i - 1], result.path[i]);
+            assert!(maze.neighbors(a).contains(&b));
+        }
+    }
+
+    #[test]
+    fn bfs_start_equals_goal_returns_single_cell() {
+        let mut maze = Maze::new(1, 1);
+        maze.start = crate::maze::Cell::new(0, 0);
+        maze.goal = crate::maze::Cell::new(0, 0);
+        let result = BfsSolver.solve(&maze);
+        assert_eq!(result.path, vec![maze.start]);
+        assert_eq!(result.stats.cost, 0);
+    }
+}
+
