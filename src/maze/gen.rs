@@ -120,17 +120,16 @@ pub fn generate_prim(width: usize, height: usize, seed: u64) -> Maze {
 pub fn generate_dfs(width: usize, height: usize, seed: u64) -> Maze {
     let mut maze = Maze::with_all_walls(width, height);
     let mut rng = StdRng::seed_from_u64(seed);
+    let start = Cell::new(0, 0);
     let mut visited = HashSet::new();
-    let mut stack = vec![Cell::new(0, 0)];
+    visited.insert(start);
+    let mut stack = vec![start];
 
     while let Some(cell) = stack.pop() {
-        if !visited.insert(cell) {
-            continue;
-        }
         let mut neighbors = neighbors_all(cell, width, height);
         neighbors.shuffle(&mut rng);
         for next in neighbors {
-            if !visited.contains(&next) {
+            if visited.insert(next) {
                 maze.walls.remove_wall(cell, next);
                 stack.push(next);
             }
