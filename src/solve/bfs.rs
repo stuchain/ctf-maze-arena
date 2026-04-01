@@ -1,5 +1,5 @@
 use crate::maze::{Cell, Maze};
-use crate::solve::{reconstruct_path, SolveFrame, SolveResult, SolveStats, Solver};
+use crate::solve::{cell_to_arr, reconstruct_path, SolveFrame, SolveResult, SolveStats, Solver};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 pub struct BfsSolver;
@@ -22,10 +22,10 @@ impl Solver for BfsSolver {
                 t,
                 frontier: queue
                     .iter()
-                    .map(|c| [c.x as u32, c.y as u32])
+                    .map(|&c| cell_to_arr(c))
                     .collect(),
-                visited: visited.iter().map(|c| [c.x as u32, c.y as u32]).collect(),
-                current: Some([cell.x as u32, cell.y as u32]),
+                visited: visited.iter().map(|&c| cell_to_arr(c)).collect(),
+                current: Some(cell_to_arr(cell)),
             });
             t = t.saturating_add(1);
             if !visited.insert(cell) {

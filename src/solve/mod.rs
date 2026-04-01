@@ -75,6 +75,10 @@ pub(crate) fn reconstruct_path(parent: &HashMap<Cell, Cell>, start: Cell, goal: 
     path
 }
 
+pub(crate) fn cell_to_arr(c: Cell) -> [u32; 2] {
+    [c.x as u32, c.y as u32]
+}
+
 pub struct StubSolver;
 
 impl Solver for StubSolver {
