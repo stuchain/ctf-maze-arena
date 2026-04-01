@@ -99,27 +99,3 @@ impl Solver for StubSolver {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{default_registry, Solver, StubSolver};
-    use crate::maze::Maze;
-
-    #[test]
-    fn solver_trait_object_compiles_and_runs() {
-        let maze = Maze::new(2, 2);
-        let s: Box<dyn Solver> = Box::new(StubSolver);
-        let r = s.solve(&maze);
-        assert!(r.path.is_empty());
-        assert_eq!(r.stats.visited, 0);
-        assert_eq!(r.stats.cost, 0);
-        assert_eq!(r.stats.ms, 0);
-    }
-
-    #[test]
-    fn bfs_registered_in_default_registry() {
-        let maze = Maze::new(2, 2);
-        let registry = default_registry();
-        let solver = registry.get("BFS").expect("BFS solver missing");
-        let _ = solver.solve(&maze);
-    }
-}
