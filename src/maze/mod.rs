@@ -329,4 +329,19 @@ mod tests {
         assert!(!maze.can_move(Cell::new(0, 0), Cell::new(2, 2), 0));
         assert!(!maze.can_move(Cell::new(0, 0), Cell::new(3, 0), 0));
     }
+
+    #[test]
+    fn corner_neighbors() {
+        let maze = Maze::new(5, 5);
+        let n = maze.neighbors(Cell::new(0, 0));
+        assert!(n.len() <= 2);
+        assert!(!n.iter().any(|c| c.x >= 5 || c.y >= 5));
+    }
+
+    #[test]
+    fn corner_neighbors_all() {
+        let n = neighbors_all(Cell::new(0, 0), 5, 5);
+        assert!(n.len() <= 2);
+        assert!(!n.iter().any(|c| c.x >= 5 || c.y >= 5));
+    }
 }
