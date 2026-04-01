@@ -28,7 +28,7 @@ pub fn is_fully_connected(maze: &Maze) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::maze::gen::{generate_kruskal, generate_prim};
+    use crate::maze::gen::{generate_dfs, generate_kruskal, generate_prim};
 
     #[test]
     fn kruskal_is_fully_connected() {
@@ -39,6 +39,12 @@ mod tests {
     #[test]
     fn prim_is_fully_connected() {
         let maze = generate_prim(10, 10, 12345);
+        assert!(is_fully_connected(&maze));
+    }
+
+    #[test]
+    fn dfs_is_fully_connected() {
+        let maze = generate_dfs(10, 10, 12345);
         assert!(is_fully_connected(&maze));
     }
 }

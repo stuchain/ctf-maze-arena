@@ -98,6 +98,33 @@ pub fn generate_prim(width: usize, height: usize, seed: u64) -> Maze {
     maze
 }
 
+/// Generate a perfect maze using iterative DFS backtracker.
+///
+/// Starts with all walls present, then performs randomized DFS and
+/// removes a wall whenever moving to a previously unvisited neighbor.
+pub fn generate_dfs(width: usize, height: usize, seed: u64) -> Maze {
+    let mut maze = Maze::with_all_walls(width, height);
+    let mut rng = StdRng::seed_from_u64(seed);
+    let mut visited = HashSet::new();
+    let mut stack = vec![Cell::new(0, 0)];
+
+    while let Some(cell) = stack.pop() {
+        if !visited.insert(cell) {
+            continue;
+        }
+        let mut neighbors = neighbors_all(cell, width, height);
+        neighbors.shuffle(&mut rng);
+        for next in neighbors {
+            if !visited.contains(&next) {
+                maze.walls.remove_wall(cell, next);
+                stack.push(next);
+            }
+        }
+    }
+
+    maze
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,6 +196,35 @@ mod tests {
     fn prim_same_seed_produces_same_structure() {
         let a = generate_prim(8, 8, 12345);
         let b = generate_prim(8, 8, 12345);
+        for y in 0..a.grid.height {
+            for x in 0..a.grid.width {
+                let c = Cell::new(x, y);
+                if x + 1 < a.grid.width {
+                    let right = Cell::new(x + 1, y);
+                    assert_eq!(a.walls.has_wall(c, right), b.walls.has_wall(c, right));
+                }
+                if y + 1 < a.grid.height {
+                    let down = Cell::new(x, y + 1);
+                    assert_eq!(a.walls.has_wall(c, down), b.walls.has_wall(c, down));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dfs_spanning_tree() {
+        let width = 5;
+        let height = 5;
+        let maze = generate_dfs(width, height, 999);
+        let total_possible_edges = Walls::all_edges(width, height).len();
+        let passages = total_possible_edges - maze.walls.wall_count();
+        assert_eq!(passages, width * height - 1);
+    }
+
+    #[test]
+    fn dfs_same_seed_produces_same_structure() {
+        let a = generate_dfs(8, 8, 12345);
+        let b = generate_dfs(8, 8, 12345);
         for y in 0..a.grid.height {
             for x in 0..a.grid.width {
                 let c = Cell::new(x, y);
