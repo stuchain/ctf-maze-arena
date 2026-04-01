@@ -5,6 +5,21 @@ use std::collections::HashSet;
 
 use super::{neighbors_all, Cell, Edge, Maze, Walls};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeneratorAlgo {
+    Kruskal,
+    Prim,
+    Dfs,
+}
+
+pub fn generate(width: usize, height: usize, seed: u64, algo: GeneratorAlgo) -> Maze {
+    match algo {
+        GeneratorAlgo::Kruskal => generate_kruskal(width, height, seed),
+        GeneratorAlgo::Prim => generate_prim(width, height, seed),
+        GeneratorAlgo::Dfs => generate_dfs(width, height, seed),
+    }
+}
+
 /// Union-Find (Disjoint Set Union) used by randomized Kruskal.
 struct UnionFind {
     parent: Vec<usize>,
@@ -237,6 +252,36 @@ mod tests {
                     assert_eq!(a.walls.has_wall(c, down), b.walls.has_wall(c, down));
                 }
             }
+        }
+    }
+
+    fn assert_same_structure(a: &Maze, b: &Maze) {
+        for y in 0..a.grid.height {
+            for x in 0..a.grid.width {
+                let c = Cell::new(x, y);
+                if x + 1 < a.grid.width {
+                    let right = Cell::new(x + 1, y);
+                    assert_eq!(a.walls.has_wall(c, right), b.walls.has_wall(c, right));
+                }
+                if y + 1 < a.grid.height {
+                    let down = Cell::new(x, y + 1);
+                    assert_eq!(a.walls.has_wall(c, down), b.walls.has_wall(c, down));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn unified_generate_is_deterministic_for_all_algorithms() {
+        let configs = [
+            GeneratorAlgo::Kruskal,
+            GeneratorAlgo::Prim,
+            GeneratorAlgo::Dfs,
+        ];
+        for algo in configs {
+            let a = generate(10, 10, 42, algo);
+            let b = generate(10, 10, 42, algo);
+            assert_same_structure(&a, &b);
         }
     }
 }

@@ -3,6 +3,7 @@ use std::collections::HashSet;
 
 pub mod gen;
 pub mod validate;
+pub use gen::{generate, GeneratorAlgo};
 
 /// Cell coordinate. (row, col) or (y, x) — pick one and stick to it.
 /// Using (x, y) for consistency with JSON [x,y] arrays.
