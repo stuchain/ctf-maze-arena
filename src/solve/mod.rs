@@ -7,6 +7,9 @@ pub mod bfs;
 pub mod astar;
 pub mod dfs;
 
+#[cfg(test)]
+mod tests;
+
 use astar::AstarSolver;
 use bfs::BfsSolver;
 use dfs::DfsSolver;
