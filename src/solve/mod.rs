@@ -1,5 +1,11 @@
 use crate::maze::{Cell, Maze};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+
+pub mod bfs;
+
+use bfs::BfsSolver;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SolveStats {
@@ -17,6 +23,14 @@ pub struct SolveResult {
 pub trait Solver: Send + Sync {
     fn name(&self) -> &'static str;
     fn solve(&self, maze: &Maze) -> SolveResult;
+}
+
+pub type SolverRegistry = HashMap<String, Arc<dyn Solver>>;
+
+pub fn default_registry() -> SolverRegistry {
+    let mut r = SolverRegistry::new();
+    r.insert("BFS".to_string(), Arc::new(BfsSolver));
+    r
 }
 
 pub struct StubSolver;
@@ -40,7 +54,7 @@ impl Solver for StubSolver {
 
 #[cfg(test)]
 mod tests {
-    use super::{Solver, StubSolver};
+    use super::{default_registry, Solver, StubSolver};
     use crate::maze::Maze;
 
     #[test]
@@ -52,5 +66,13 @@ mod tests {
         assert_eq!(r.stats.visited, 0);
         assert_eq!(r.stats.cost, 0);
         assert_eq!(r.stats.ms, 0);
+    }
+
+    #[test]
+    fn bfs_registered_in_default_registry() {
+        let maze = Maze::new(2, 2);
+        let registry = default_registry();
+        let solver = registry.get("BFS").expect("BFS solver missing");
+        let _ = solver.solve(&maze);
     }
 }
