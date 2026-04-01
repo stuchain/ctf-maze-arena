@@ -110,8 +110,9 @@ fn reconstruct_dp_path(
 
 #[cfg(test)]
 mod tests {
-    use super::DpState;
-    use crate::maze::Cell;
+    use super::{DpKeysSolver, DpState};
+    use crate::maze::{Cell, Edge, Maze};
+    use crate::solve::Solver;
 
     #[test]
     fn state_bitmask_tracks_keys() {
@@ -119,5 +120,42 @@ mod tests {
         let s = DpState::initial(start).with_key(0);
         assert!(s.has_key(0));
         assert!(!s.has_key(1));
+    }
+
+    fn make_keys_maze() -> Maze {
+        let mut maze = Maze::with_all_walls(3, 3);
+        maze.start = Cell::new(0, 0);
+        maze.goal = Cell::new(2, 2);
+        maze.walls.remove_wall(Cell::new(0, 0), Cell::new(1, 0));
+        maze.walls.remove_wall(Cell::new(1, 0), Cell::new(1, 1));
+        maze.walls.remove_wall(Cell::new(1, 1), Cell::new(2, 1));
+        maze.walls.remove_wall(Cell::new(2, 1), Cell::new(2, 2));
+        maze.keys.insert(Cell::new(1, 1), 0);
+        maze.doors
+            .insert(Edge::normalized(Cell::new(2, 1), Cell::new(2, 2)), 0);
+        maze
+    }
+
+    #[test]
+    fn dp_collects_key_before_door() {
+        let maze = make_keys_maze();
+        let r = DpKeysSolver.solve(&maze);
+        assert!(!r.path.is_empty());
+        assert!(r.path.contains(&Cell::new(1, 1)));
+        let key_idx = r.path.iter().position(|&c| c == Cell::new(1, 1)).unwrap();
+        let door_idx = r.path.iter().position(|&c| c == Cell::new(2, 2)).unwrap();
+        assert!(key_idx < door_idx);
+    }
+
+    #[test]
+    fn dp_returns_empty_when_impossible() {
+        let mut maze = Maze::with_all_walls(2, 1);
+        maze.start = Cell::new(0, 0);
+        maze.goal = Cell::new(1, 0);
+        maze.walls.remove_wall(Cell::new(0, 0), Cell::new(1, 0));
+        maze.doors
+            .insert(Edge::normalized(Cell::new(0, 0), Cell::new(1, 0)), 0);
+        let r = DpKeysSolver.solve(&maze);
+        assert!(r.path.is_empty());
     }
 }
