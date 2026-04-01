@@ -1,6 +1,7 @@
 use rand::rngs::StdRng;
-use rand::seq::SliceRandom;
+use rand::seq::{IteratorRandom, SliceRandom};
 use rand::SeedableRng;
+use std::collections::HashSet;
 
 use super::{Cell, Edge, Maze, Walls};
 
@@ -58,10 +59,66 @@ pub fn generate_kruskal(width: usize, height: usize, seed: u64) -> Maze {
     maze
 }
 
+fn neighbors_all(cell: Cell, width: usize, height: usize) -> Vec<Cell> {
+    let mut out = Vec::with_capacity(4);
+    if cell.x + 1 < width {
+        out.push(Cell::new(cell.x + 1, cell.y));
+    }
+    if cell.y + 1 < height {
+        out.push(Cell::new(cell.x, cell.y + 1));
+    }
+    if cell.x > 0 {
+        out.push(Cell::new(cell.x - 1, cell.y));
+    }
+    if cell.y > 0 {
+        out.push(Cell::new(cell.x, cell.y - 1));
+    }
+    out
+}
+
+/// Generate a perfect maze using randomized Prim.
+///
+/// Starts with all walls present and grows a tree by repeatedly
+/// selecting a random frontier edge that adds a new cell.
+pub fn generate_prim(width: usize, height: usize, seed: u64) -> Maze {
+    let mut maze = Maze::with_all_walls(width, height);
+    let mut rng = StdRng::seed_from_u64(seed);
+
+    let mut in_tree = HashSet::new();
+    let start = Cell::new(
+        (0..width).choose(&mut rng).unwrap_or(0),
+        (0..height).choose(&mut rng).unwrap_or(0),
+    );
+    in_tree.insert(start);
+
+    // Frontier edges (from_tree, to_candidate).
+    let mut frontier: Vec<(Cell, Cell)> = Vec::new();
+    for n in neighbors_all(start, width, height) {
+        frontier.push((start, n));
+    }
+
+    while !frontier.is_empty() {
+        let idx = (0..frontier.len()).choose(&mut rng).unwrap();
+        let (from, to) = frontier.swap_remove(idx);
+        if in_tree.contains(&to) {
+            continue;
+        }
+        maze.walls.remove_wall(from, to);
+        in_tree.insert(to);
+        for n in neighbors_all(to, width, height) {
+            if !in_tree.contains(&n) {
+                frontier.push((to, n));
+            }
+        }
+    }
+
+    maze
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::{HashSet, VecDeque};
+    use std::collections::VecDeque;
 
     fn bfs_reachable(maze: &Maze, from: Cell) -> HashSet<Cell> {
         let mut visited = HashSet::new();
@@ -112,6 +169,43 @@ mod tests {
     fn kruskal_same_seed_produces_same_structure() {
         let a = generate_kruskal(8, 8, 12345);
         let b = generate_kruskal(8, 8, 12345);
+        for y in 0..a.grid.height {
+            for x in 0..a.grid.width {
+                let c = Cell::new(x, y);
+                if x + 1 < a.grid.width {
+                    let right = Cell::new(x + 1, y);
+                    assert_eq!(a.walls.has_wall(c, right), b.walls.has_wall(c, right));
+                }
+                if y + 1 < a.grid.height {
+                    let down = Cell::new(x, y + 1);
+                    assert_eq!(a.walls.has_wall(c, down), b.walls.has_wall(c, down));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn prim_connectivity() {
+        let maze = generate_prim(10, 10, 12345);
+        let reached = bfs_reachable(&maze, maze.start);
+        assert_eq!(reached.len(), 100, "all cells reachable");
+        assert!(reached.contains(&maze.goal));
+    }
+
+    #[test]
+    fn prim_spanning_tree() {
+        let width = 5;
+        let height = 5;
+        let maze = generate_prim(width, height, 999);
+        let total_possible_edges = Walls::all_edges(width, height).len();
+        let passages = total_possible_edges - maze.walls.wall_count();
+        assert_eq!(passages, width * height - 1);
+    }
+
+    #[test]
+    fn prim_same_seed_produces_same_structure() {
+        let a = generate_prim(8, 8, 12345);
+        let b = generate_prim(8, 8, 12345);
         for y in 0..a.grid.height {
             for x in 0..a.grid.width {
                 let c = Cell::new(x, y);
