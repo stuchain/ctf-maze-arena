@@ -4,8 +4,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub mod bfs;
+pub mod astar;
 pub mod dfs;
 
+use astar::AstarSolver;
 use bfs::BfsSolver;
 use dfs::DfsSolver;
 
@@ -33,6 +35,7 @@ pub fn default_registry() -> SolverRegistry {
     let mut r = SolverRegistry::new();
     r.insert("BFS".to_string(), Arc::new(BfsSolver));
     r.insert("DFS".to_string(), Arc::new(DfsSolver));
+    r.insert("ASTAR".to_string(), Arc::new(AstarSolver));
     r
 }
 
