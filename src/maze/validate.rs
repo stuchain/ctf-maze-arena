@@ -1,6 +1,6 @@
 use std::collections::{HashSet, VecDeque};
 
-use super::{Cell, Maze};
+use super::{neighbors_all, Cell, Maze};
 
 fn bfs_reachable(maze: &Maze, from: Cell) -> HashSet<Cell> {
     let mut visited = HashSet::new();
@@ -25,6 +25,17 @@ pub fn is_fully_connected(maze: &Maze) -> bool {
     reached.len() == maze.grid.width * maze.grid.height
 }
 
+pub fn walls_are_symmetric(maze: &Maze) -> bool {
+    for cell in maze.grid.cells() {
+        for n in neighbors_all(cell, maze.grid.width, maze.grid.height) {
+            if maze.walls.has_wall(cell, n) != maze.walls.has_wall(n, cell) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -46,5 +57,25 @@ mod tests {
     fn dfs_is_fully_connected() {
         let maze = generate_dfs(10, 10, 12345);
         assert!(is_fully_connected(&maze));
+    }
+
+    #[test]
+    fn generated_mazes_have_symmetric_walls() {
+        let kruskal = generate_kruskal(10, 10, 12345);
+        let prim = generate_prim(10, 10, 12345);
+        let dfs = generate_dfs(10, 10, 12345);
+        assert!(walls_are_symmetric(&kruskal));
+        assert!(walls_are_symmetric(&prim));
+        assert!(walls_are_symmetric(&dfs));
+    }
+
+    #[test]
+    fn direct_has_wall_symmetry_sanity() {
+        let maze = generate_kruskal(5, 5, 99);
+        for cell in maze.grid.cells() {
+            for n in neighbors_all(cell, maze.grid.width, maze.grid.height) {
+                assert_eq!(maze.walls.has_wall(cell, n), maze.walls.has_wall(n, cell));
+            }
+        }
     }
 }
