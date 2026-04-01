@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub mod gen;
 pub mod validate;
@@ -133,7 +133,14 @@ pub struct Maze {
     pub walls: Walls,
     pub start: Cell,
     pub goal: Cell,
+    /// cell -> key id (if any)
+    pub keys: HashMap<Cell, KeyId>,
+    /// edge -> required key id
+    pub doors: HashMap<Edge, KeyId>,
 }
+
+/// Key id: 0..=31 for u32 bitmask.
+pub type KeyId = u8;
 
 impl Maze {
     pub fn new(width: usize, height: usize) -> Self {
@@ -146,6 +153,8 @@ impl Maze {
             walls,
             start,
             goal,
+            keys: HashMap::new(),
+            doors: HashMap::new(),
         }
     }
 
@@ -162,6 +171,8 @@ impl Maze {
             walls,
             start,
             goal,
+            keys: HashMap::new(),
+            doors: HashMap::new(),
         }
     }
 
@@ -190,6 +201,36 @@ impl Maze {
             out.push(Cell::new(cell.x, cell.y - 1));
         }
         out
+    }
+
+    pub fn has_key_at(&self, cell: Cell) -> Option<KeyId> {
+        self.keys.get(&cell).copied()
+    }
+
+    pub fn door_requires(&self, a: Cell, b: Cell) -> Option<KeyId> {
+        self.doors.get(&Edge::normalized(a, b)).copied()
+    }
+
+    /// Can we move from a to b with a given key bitmask?
+    pub fn can_move(&self, a: Cell, b: Cell, keys: u32) -> bool {
+        if !self.in_bounds(a) || !self.in_bounds(b) {
+            return false;
+        }
+        let dx = a.x.abs_diff(b.x);
+        let dy = a.y.abs_diff(b.y);
+        if dx + dy != 1 {
+            return false;
+        }
+        if self.walls.has_wall(a, b) {
+            return false;
+        }
+        if let Some(kid) = self.door_requires(a, b) {
+            if kid > 31 {
+                return false;
+            }
+            return (keys & (1 << kid)) != 0;
+        }
+        true
     }
 }
 
@@ -260,5 +301,32 @@ mod tests {
         // Corner (0,0): only east and south → 2 neighbors
         let corner = Cell::new(0, 0);
         assert_eq!(maze.neighbors(corner).len(), 2);
+    }
+
+    #[test]
+    fn can_move_respects_door_key_requirement() {
+        let mut maze = Maze::new(3, 3);
+        let a = Cell::new(0, 0);
+        let b = Cell::new(1, 0);
+        maze.doors.insert(Edge::normalized(a, b), 2);
+        assert!(!maze.can_move(a, b, 0));
+        assert!(maze.can_move(a, b, 1 << 2));
+    }
+
+    #[test]
+    fn door_lookup_is_direction_independent() {
+        let mut maze = Maze::new(3, 3);
+        let a = Cell::new(0, 0);
+        let b = Cell::new(1, 0);
+        maze.doors.insert(Edge::normalized(a, b), 1);
+        assert_eq!(maze.door_requires(a, b), Some(1));
+        assert_eq!(maze.door_requires(b, a), Some(1));
+    }
+
+    #[test]
+    fn can_move_rejects_non_adjacent_or_oob() {
+        let maze = Maze::new(3, 3);
+        assert!(!maze.can_move(Cell::new(0, 0), Cell::new(2, 2), 0));
+        assert!(!maze.can_move(Cell::new(0, 0), Cell::new(3, 0), 0));
     }
 }
