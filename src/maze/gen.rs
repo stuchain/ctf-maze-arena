@@ -3,7 +3,7 @@ use rand::seq::{IteratorRandom, SliceRandom};
 use rand::SeedableRng;
 use std::collections::HashSet;
 
-use super::{Cell, Edge, Maze, Walls};
+use super::{neighbors_all, Cell, Edge, Maze, Walls};
 
 /// Union-Find (Disjoint Set Union) used by randomized Kruskal.
 struct UnionFind {
@@ -59,23 +59,6 @@ pub fn generate_kruskal(width: usize, height: usize, seed: u64) -> Maze {
     maze
 }
 
-fn neighbors_all(cell: Cell, width: usize, height: usize) -> Vec<Cell> {
-    let mut out = Vec::with_capacity(4);
-    if cell.x + 1 < width {
-        out.push(Cell::new(cell.x + 1, cell.y));
-    }
-    if cell.y + 1 < height {
-        out.push(Cell::new(cell.x, cell.y + 1));
-    }
-    if cell.x > 0 {
-        out.push(Cell::new(cell.x - 1, cell.y));
-    }
-    if cell.y > 0 {
-        out.push(Cell::new(cell.x, cell.y - 1));
-    }
-    out
-}
-
 /// Generate a perfect maze using randomized Prim.
 ///
 /// Starts with all walls present and grows a tree by repeatedly
@@ -118,25 +101,7 @@ pub fn generate_prim(width: usize, height: usize, seed: u64) -> Maze {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::VecDeque;
-
-    fn bfs_reachable(maze: &Maze, from: Cell) -> HashSet<Cell> {
-        let mut visited = HashSet::new();
-        let mut queue = VecDeque::from([from]);
-
-        while let Some(cell) = queue.pop_front() {
-            if !visited.insert(cell) {
-                continue;
-            }
-            for neighbor in maze.neighbors(cell) {
-                if !visited.contains(&neighbor) {
-                    queue.push_back(neighbor);
-                }
-            }
-        }
-
-        visited
-    }
+    use crate::maze::validate::is_fully_connected;
 
     #[test]
     fn kruskal_neighbors_within_expected_bounds() {
@@ -150,9 +115,8 @@ mod tests {
     #[test]
     fn kruskal_connectivity() {
         let maze = generate_kruskal(10, 10, 12345);
-        let reached = bfs_reachable(&maze, maze.start);
-        assert_eq!(reached.len(), 100, "all cells reachable");
-        assert!(reached.contains(&maze.goal));
+        assert!(is_fully_connected(&maze), "all cells reachable from start");
+        assert!(maze.neighbors(maze.start).len() >= 1);
     }
 
     #[test]
@@ -187,9 +151,8 @@ mod tests {
     #[test]
     fn prim_connectivity() {
         let maze = generate_prim(10, 10, 12345);
-        let reached = bfs_reachable(&maze, maze.start);
-        assert_eq!(reached.len(), 100, "all cells reachable");
-        assert!(reached.contains(&maze.goal));
+        assert!(is_fully_connected(&maze), "all cells reachable from start");
+        assert!(maze.neighbors(maze.start).len() >= 1);
     }
 
     #[test]

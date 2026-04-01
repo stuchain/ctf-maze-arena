@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 pub mod gen;
+pub mod validate;
 
 /// Cell coordinate. (row, col) or (y, x) — pick one and stick to it.
 /// Using (x, y) for consistency with JSON [x,y] arrays.
@@ -189,6 +190,24 @@ impl Maze {
         }
         out
     }
+}
+
+/// Neighbor cells in E, S, W, N order, ignoring walls.
+pub fn neighbors_all(cell: Cell, width: usize, height: usize) -> Vec<Cell> {
+    let mut out = Vec::with_capacity(4);
+    if cell.x + 1 < width {
+        out.push(Cell::new(cell.x + 1, cell.y));
+    }
+    if cell.y + 1 < height {
+        out.push(Cell::new(cell.x, cell.y + 1));
+    }
+    if cell.x > 0 {
+        out.push(Cell::new(cell.x - 1, cell.y));
+    }
+    if cell.y > 0 {
+        out.push(Cell::new(cell.x, cell.y - 1));
+    }
+    out
 }
 
 #[cfg(test)]
