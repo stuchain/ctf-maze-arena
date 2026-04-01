@@ -1,5 +1,6 @@
-use crate::maze::Maze;
+use crate::maze::{Cell, Maze};
 use crate::solve::{SolveResult, SolveStats, Solver};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 pub struct BfsSolver;
 
@@ -8,14 +9,61 @@ impl Solver for BfsSolver {
         "BFS"
     }
 
-    fn solve(&self, _maze: &Maze) -> SolveResult {
+    fn solve(&self, maze: &Maze) -> SolveResult {
+        let start_time = std::time::Instant::now();
+        let mut visited = HashSet::new();
+        let mut parent: HashMap<Cell, Cell> = HashMap::new();
+        let mut queue = VecDeque::from([maze.start]);
+
+        while let Some(cell) = queue.pop_front() {
+            if !visited.insert(cell) {
+                continue;
+            }
+            if cell == maze.goal {
+                break;
+            }
+            for next in maze.neighbors(cell) {
+                if !visited.contains(&next) && !parent.contains_key(&next) {
+                    parent.insert(next, cell);
+                    queue.push_back(next);
+                }
+            }
+        }
+
+        let path = reconstruct_path(&parent, maze.start, maze.goal);
+        let cost = path.len().saturating_sub(1);
+        let ms = start_time.elapsed().as_millis() as u64;
         SolveResult {
-            path: vec![],
+            path,
             stats: SolveStats {
-                visited: 0,
-                cost: 0,
-                ms: 0,
+                visited: visited.len(),
+                cost,
+                ms,
             },
         }
     }
 }
+
+fn reconstruct_path(parent: &HashMap<Cell, Cell>, start: Cell, goal: Cell) -> Vec<Cell> {
+    if start == goal {
+        return vec![start];
+    }
+
+    let mut path = Vec::new();
+    let mut cur = goal;
+
+    loop {
+        path.push(cur);
+        if cur == start {
+            break;
+        }
+        match parent.get(&cur) {
+            Some(&p) => cur = p,
+            None => return vec![],
+        }
+    }
+
+    path.reverse();
+    path
+}
+
