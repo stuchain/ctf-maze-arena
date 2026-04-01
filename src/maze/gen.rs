@@ -61,6 +61,25 @@ pub fn generate_kruskal(width: usize, height: usize, seed: u64) -> Maze {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{HashSet, VecDeque};
+
+    fn bfs_reachable(maze: &Maze, from: Cell) -> HashSet<Cell> {
+        let mut visited = HashSet::new();
+        let mut queue = VecDeque::from([from]);
+
+        while let Some(cell) = queue.pop_front() {
+            if !visited.insert(cell) {
+                continue;
+            }
+            for neighbor in maze.neighbors(cell) {
+                if !visited.contains(&neighbor) {
+                    queue.push_back(neighbor);
+                }
+            }
+        }
+
+        visited
+    }
 
     #[test]
     fn kruskal_neighbors_within_expected_bounds() {
@@ -72,7 +91,15 @@ mod tests {
     }
 
     #[test]
-    fn kruskal_spanning_tree_invariant() {
+    fn kruskal_connectivity() {
+        let maze = generate_kruskal(10, 10, 12345);
+        let reached = bfs_reachable(&maze, maze.start);
+        assert_eq!(reached.len(), 100, "all cells reachable");
+        assert!(reached.contains(&maze.goal));
+    }
+
+    #[test]
+    fn kruskal_spanning_tree() {
         let width = 5;
         let height = 5;
         let maze = generate_kruskal(width, height, 999);
