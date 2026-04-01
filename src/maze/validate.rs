@@ -36,6 +36,10 @@ pub fn walls_are_symmetric(maze: &Maze) -> bool {
     true
 }
 
+pub fn start_reachable_from_goal(maze: &Maze) -> bool {
+    bfs_reachable(maze, maze.start).contains(&maze.goal)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -77,5 +81,26 @@ mod tests {
                 assert_eq!(maze.walls.has_wall(cell, n), maze.walls.has_wall(n, cell));
             }
         }
+    }
+
+    #[test]
+    fn goal_reachable_in_generated_maze() {
+        let maze = generate_kruskal(10, 10, 12345);
+        assert!(start_reachable_from_goal(&maze));
+    }
+
+    #[test]
+    fn goal_unreachable_in_fully_walled_maze() {
+        let maze = Maze::with_all_walls(3, 3);
+        assert!(!start_reachable_from_goal(&maze));
+    }
+
+    #[test]
+    fn goal_unreachable_when_only_start_component_is_open() {
+        let mut maze = Maze::with_all_walls(3, 3);
+        // Open a tiny component near start, keep goal isolated.
+        maze.walls.remove_wall(Cell::new(0, 0), Cell::new(1, 0));
+        maze.walls.remove_wall(Cell::new(1, 0), Cell::new(1, 1));
+        assert!(!start_reachable_from_goal(&maze));
     }
 }
