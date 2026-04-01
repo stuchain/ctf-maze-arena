@@ -1,5 +1,5 @@
 use crate::maze::{Cell, Maze};
-use crate::solve::{SolveResult, SolveStats, Solver};
+use crate::solve::{reconstruct_path, SolveResult, SolveStats, Solver};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 pub struct BfsSolver;
@@ -42,29 +42,6 @@ impl Solver for BfsSolver {
             },
         }
     }
-}
-
-fn reconstruct_path(parent: &HashMap<Cell, Cell>, start: Cell, goal: Cell) -> Vec<Cell> {
-    if start == goal {
-        return vec![start];
-    }
-
-    let mut path = Vec::new();
-    let mut cur = goal;
-
-    loop {
-        path.push(cur);
-        if cur == start {
-            break;
-        }
-        match parent.get(&cur) {
-            Some(&p) => cur = p,
-            None => return vec![],
-        }
-    }
-
-    path.reverse();
-    path
 }
 
 #[cfg(test)]

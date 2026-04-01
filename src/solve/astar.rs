@@ -1,5 +1,5 @@
 use crate::maze::{Cell, Maze};
-use crate::solve::{SolveResult, SolveStats, Solver};
+use crate::solve::{reconstruct_path, SolveResult, SolveStats, Solver};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
@@ -79,23 +79,3 @@ impl Solver for AstarSolver {
     }
 }
 
-fn reconstruct_path(parent: &HashMap<Cell, Cell>, start: Cell, goal: Cell) -> Vec<Cell> {
-    if start == goal {
-        return vec![start];
-    }
-
-    let mut path = Vec::new();
-    let mut cur = goal;
-    loop {
-        path.push(cur);
-        if cur == start {
-            break;
-        }
-        match parent.get(&cur) {
-            Some(&p) => cur = p,
-            None => return vec![],
-        }
-    }
-    path.reverse();
-    path
-}
