@@ -4,8 +4,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub mod bfs;
+pub mod dfs;
 
 use bfs::BfsSolver;
+use dfs::DfsSolver;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SolveStats {
@@ -30,6 +32,7 @@ pub type SolverRegistry = HashMap<String, Arc<dyn Solver>>;
 pub fn default_registry() -> SolverRegistry {
     let mut r = SolverRegistry::new();
     r.insert("BFS".to_string(), Arc::new(BfsSolver));
+    r.insert("DFS".to_string(), Arc::new(DfsSolver));
     r
 }
 
