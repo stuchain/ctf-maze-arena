@@ -14,6 +14,7 @@ mod tests;
 use astar::AstarSolver;
 use bfs::BfsSolver;
 use dfs::DfsSolver;
+use dp::DpKeysSolver;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SolveStats {
@@ -40,6 +41,7 @@ pub fn default_registry() -> SolverRegistry {
     r.insert("BFS".to_string(), Arc::new(BfsSolver));
     r.insert("DFS".to_string(), Arc::new(DfsSolver));
     r.insert("ASTAR".to_string(), Arc::new(AstarSolver));
+    r.insert("DP_KEYS".to_string(), Arc::new(DpKeysSolver));
     r
 }
 
