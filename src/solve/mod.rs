@@ -6,6 +6,7 @@ use std::sync::Arc;
 pub mod bfs;
 pub mod astar;
 pub mod dfs;
+pub mod dp;
 
 #[cfg(test)]
 mod tests;
