@@ -83,6 +83,7 @@ impl Solver for DpKeysSolver {
                 cost,
                 ms,
             },
+            frames: vec![],
         }
     }
 }

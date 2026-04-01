@@ -75,6 +75,7 @@ impl Solver for AstarSolver {
                 cost,
                 ms,
             },
+            frames: vec![],
         }
     }
 }

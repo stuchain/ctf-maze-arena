@@ -40,6 +40,7 @@ impl Solver for DfsSolver {
                 cost,
                 ms,
             },
+            frames: vec![],
         }
     }
 }

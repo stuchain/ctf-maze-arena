@@ -23,10 +23,19 @@ pub struct SolveStats {
     pub ms: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SolveFrame {
+    pub t: u32,
+    pub frontier: Vec<[u32; 2]>,
+    pub visited: Vec<[u32; 2]>,
+    pub current: Option<[u32; 2]>,
+}
+
 #[derive(Debug, Clone)]
 pub struct SolveResult {
     pub path: Vec<Cell>,
     pub stats: SolveStats,
+    pub frames: Vec<SolveFrame>,
 }
 
 pub trait Solver: Send + Sync {
@@ -81,6 +90,7 @@ impl Solver for StubSolver {
                 cost: 0,
                 ms: 0,
             },
+            frames: vec![],
         }
     }
 }

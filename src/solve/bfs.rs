@@ -1,5 +1,5 @@
 use crate::maze::{Cell, Maze};
-use crate::solve::{reconstruct_path, SolveResult, SolveStats, Solver};
+use crate::solve::{reconstruct_path, SolveFrame, SolveResult, SolveStats, Solver};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 pub struct BfsSolver;
@@ -14,8 +14,20 @@ impl Solver for BfsSolver {
         let mut visited = HashSet::new();
         let mut parent: HashMap<Cell, Cell> = HashMap::new();
         let mut queue = VecDeque::from([maze.start]);
+        let mut frames = Vec::new();
+        let mut t = 0_u32;
 
         while let Some(cell) = queue.pop_front() {
+            frames.push(SolveFrame {
+                t,
+                frontier: queue
+                    .iter()
+                    .map(|c| [c.x as u32, c.y as u32])
+                    .collect(),
+                visited: visited.iter().map(|c| [c.x as u32, c.y as u32]).collect(),
+                current: Some([cell.x as u32, cell.y as u32]),
+            });
+            t = t.saturating_add(1);
             if !visited.insert(cell) {
                 continue;
             }
@@ -40,6 +52,7 @@ impl Solver for BfsSolver {
                 cost,
                 ms,
             },
+            frames,
         }
     }
 }
@@ -71,6 +84,13 @@ mod tests {
         let result = BfsSolver.solve(&maze);
         assert_eq!(result.path, vec![maze.start]);
         assert_eq!(result.stats.cost, 0);
+    }
+
+    #[test]
+    fn bfs_collects_animation_frames() {
+        let maze = generate(5, 5, 7, GeneratorAlgo::Kruskal);
+        let result = BfsSolver.solve(&maze);
+        assert!(!result.frames.is_empty());
     }
 }
 
