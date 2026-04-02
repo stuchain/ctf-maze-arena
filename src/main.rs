@@ -1,6 +1,7 @@
 mod maze;
 mod solve;
 mod replay;
+mod store;
 
 use sqlx::sqlite::SqlitePoolOptions;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};

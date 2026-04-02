@@ -63,7 +63,7 @@ impl Grid {
 
 /// Directed edge (a, b) means wall between a and b.
 /// Normalize: always store (min_cell, max_cell) so (A,B) and (B,A) map to same key.
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Edge(pub Cell, pub Cell);
 
 impl Edge {
@@ -78,7 +78,7 @@ impl Edge {
 }
 
 /// Walls: set of edges. No wall = passage.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Walls {
     inner: HashSet<Edge>,
 }
@@ -231,6 +231,40 @@ impl Maze {
             return (keys & (1 << kid)) != 0;
         }
         true
+    }
+
+    /// Build a maze from JSON blobs stored in the DB.
+    ///
+    /// The stored strings come from:
+    /// - `walls_json` -> serialization of `maze.walls`
+    /// - `keys_json`  -> serialization of `maze.keys`
+    /// - `doors_json` -> serialization of `maze.doors`
+    pub fn from_json(
+        width: usize,
+        height: usize,
+        walls_json: &str,
+        keys_json: &str,
+        doors_json: &str,
+    ) -> Result<Self, serde_json::Error> {
+        let walls: Walls = serde_json::from_str(walls_json)?;
+
+        let keys: HashMap<Cell, KeyId> = if keys_json.trim().is_empty() {
+            HashMap::new()
+        } else {
+            serde_json::from_str(keys_json)?
+        };
+
+        let doors: HashMap<Edge, KeyId> = if doors_json.trim().is_empty() {
+            HashMap::new()
+        } else {
+            serde_json::from_str(doors_json)?
+        };
+
+        let mut maze = Maze::new(width, height);
+        maze.walls = walls;
+        maze.keys = keys;
+        maze.doors = doors;
+        Ok(maze)
     }
 }
 
