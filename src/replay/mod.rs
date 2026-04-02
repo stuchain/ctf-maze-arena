@@ -61,9 +61,54 @@ pub fn decimate_frames(frames: Vec<ReplayFrame>, step: u32) -> Vec<ReplayFrame> 
     out
 }
 
+use crate::solve::SolveResult;
+
+/// Build a `Replay` object from a solver run.
+///
+/// `decimate_step` controls how many solver expansions we keep per frame (to keep JSON small).
+pub fn build_replay(
+    maze_id: impl Into<String>,
+    solver_name: impl Into<String>,
+    seed: u64,
+    result: SolveResult,
+    decimate_step: u32,
+) -> Replay {
+    let replay_frames: Vec<ReplayFrame> = result
+        .frames
+        .into_iter()
+        .map(|f| ReplayFrame {
+            t: f.t,
+            frontier: f.frontier,
+            visited: f.visited,
+            current: f.current,
+        })
+        .collect();
+
+    let frames = decimate_frames(replay_frames, decimate_step);
+
+    let path = result.path.into_iter().map(cell_to_arr).collect();
+    let stats = ReplayStats {
+        visited: result.stats.visited,
+        cost: result.stats.cost,
+        ms: result.stats.ms,
+    };
+
+    Replay {
+        maze_id: maze_id.into(),
+        solver: solver_name.into(),
+        seed,
+        frames,
+        path,
+        stats,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{decimate_frames, Replay, ReplayFrame, ReplayStats};
+    use super::{build_replay, decimate_frames, Replay, ReplayFrame, ReplayStats};
+    use crate::maze::{generate, GeneratorAlgo};
+    use crate::solve::bfs::BfsSolver;
+    use crate::solve::Solver;
 
     #[test]
     fn replay_json_roundtrip() {
@@ -142,6 +187,21 @@ mod tests {
         assert_eq!(out.len(), 11);
         assert_eq!(out.first().unwrap().t, 0);
         assert_eq!(out.last().unwrap().t, 99);
+    }
+
+    #[test]
+    fn build_replay_from_bfs_result_has_basic_invariants() {
+        let maze = generate(6, 6, 42, GeneratorAlgo::Kruskal);
+        let result = BfsSolver.solve(&maze);
+        let last_t = result.frames.last().expect("BFS should have frames").t;
+
+        let replay = build_replay("maze-1", "BFS", 42, result, 5);
+
+        assert!(!replay.frames.is_empty());
+        assert!(!replay.path.is_empty());
+        assert_eq!(replay.frames.first().unwrap().t, 0);
+        assert_eq!(replay.frames.last().unwrap().t, last_t);
+        assert_eq!(replay.stats.cost, replay.path.len().saturating_sub(1));
     }
 }
 
