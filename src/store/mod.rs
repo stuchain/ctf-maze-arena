@@ -1,5 +1,6 @@
 use crate::maze::Maze;
 use crate::solve::SolveStats;
+use crate::replay;
 use sqlx::SqlitePool;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -123,5 +124,39 @@ pub async fn get_run(
         solver,
         stats,
     }))
+}
+
+pub async fn save_replay(
+    pool: &SqlitePool,
+    run_id: &str,
+    replay: &crate::replay::Replay,
+) -> Result<(), sqlx::Error> {
+    let id = Uuid::new_v4().to_string();
+    let json = replay::to_json(replay).expect("replay JSON should serialize");
+
+    sqlx::query(
+        "INSERT OR REPLACE INTO replays (id, run_id, replay_json) VALUES (?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(run_id)
+    .bind(&json)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn get_replay(
+    pool: &SqlitePool,
+    run_id: &str,
+) -> Result<Option<crate::replay::Replay>, sqlx::Error> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT replay_json FROM replays WHERE run_id = ?",
+    )
+    .bind(run_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.and_then(|(j,)| replay::from_json(&j).ok()))
 }
 
