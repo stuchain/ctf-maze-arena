@@ -160,3 +160,20 @@ pub async fn get_replay(
     Ok(row.and_then(|(j,)| replay::from_json(&j).ok()))
 }
 
+pub async fn run_solve_and_save(
+    pool: &SqlitePool,
+    maze_id: &str,
+    solver_name: &str,
+    maze: &crate::maze::Maze,
+    solver: &dyn crate::solve::Solver,
+) -> Result<RunId, Box<dyn std::error::Error + Send + Sync>> {
+    let run_id = create_run(pool, maze_id, solver_name).await?;
+    let result = solver.solve(maze);
+    update_run_stats(pool, &run_id, &result.stats).await?;
+
+    let replay = crate::replay::build_replay(maze_id, solver_name, 0, result, 5);
+    save_replay(pool, &run_id, &replay).await?;
+
+    Ok(run_id)
+}
+
