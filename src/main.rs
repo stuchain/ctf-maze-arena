@@ -2,6 +2,7 @@ mod maze;
 mod solve;
 mod replay;
 
+use sqlx::sqlite::SqlitePoolOptions;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -13,5 +14,22 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    dotenvy::dotenv().ok();
+
+    match init_db().await {
+        Ok(_) => tracing::info!("database initialized"),
+        Err(e) => tracing::warn!("database init failed: {e}"),
+    }
+
     tracing::info!("server starting");
+}
+
+async fn init_db() -> Result<sqlx::SqlitePool, sqlx::Error> {
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "sqlite:./data/ctf_maze.db".into());
+
+    SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect(&url)
+        .await
 }

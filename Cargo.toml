@@ -11,6 +11,8 @@ serde_json = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rand = "0.8"
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite"] }
+dotenvy = "0.15"
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }
