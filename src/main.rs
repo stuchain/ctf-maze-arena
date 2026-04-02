@@ -1,5 +1,6 @@
 mod maze;
 mod solve;
+mod replay;
 
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
