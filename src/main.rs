@@ -28,8 +28,13 @@ async fn init_db() -> Result<sqlx::SqlitePool, sqlx::Error> {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "sqlite:./data/ctf_maze.db".into());
 
-    SqlitePoolOptions::new()
+    let pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect(&url)
-        .await
+        .await?;
+
+    // Apply migrations on startup so tables exist before we store anything.
+    sqlx::migrate!("./migrations").run(&pool).await?;
+
+    Ok(pool)
 }
