@@ -103,9 +103,18 @@ pub fn build_replay(
     }
 }
 
+pub fn to_json(replay: &Replay) -> Result<String, serde_json::Error> {
+    serde_json::to_string(replay)
+}
+
+pub fn from_json(s: &str) -> Result<Replay, serde_json::Error> {
+    serde_json::from_str::<Replay>(s)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{build_replay, decimate_frames, Replay, ReplayFrame, ReplayStats};
+    use super::{from_json, to_json};
     use crate::maze::{generate, GeneratorAlgo};
     use crate::solve::bfs::BfsSolver;
     use crate::solve::Solver;
@@ -202,6 +211,35 @@ mod tests {
         assert_eq!(replay.frames.first().unwrap().t, 0);
         assert_eq!(replay.frames.last().unwrap().t, last_t);
         assert_eq!(replay.stats.cost, replay.path.len().saturating_sub(1));
+    }
+
+    #[test]
+    fn replay_to_json_and_back_roundtrip() {
+        let replay = Replay {
+            maze_id: "maze-1".to_string(),
+            solver: "ASTAR".to_string(),
+            seed: 42,
+            frames: vec![ReplayFrame {
+                t: 0,
+                frontier: vec![],
+                visited: vec![],
+                current: None,
+            }],
+            path: vec![[0, 0]],
+            stats: ReplayStats {
+                visited: 0,
+                cost: 0,
+                ms: 0,
+            },
+        };
+
+        let json = to_json(&replay).expect("to_json works");
+        let parsed = from_json(&json).expect("from_json works");
+
+        assert_eq!(parsed.maze_id, replay.maze_id);
+        assert_eq!(parsed.solver, replay.solver);
+        assert_eq!(parsed.seed, replay.seed);
+        assert_eq!(parsed.path, replay.path);
     }
 }
 
