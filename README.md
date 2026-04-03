@@ -65,6 +65,5 @@ The frontend calls the backend using `NEXT_PUBLIC_API_URL` (default: `http://loc
 - `migrations/` - SQLite schema migrations used by the backend
 - `web/` - Next.js frontend scaffold
 - `web/components/` - core UI components (maze drawing, solver picker, generate form)
-- `docs/commit/` - implementation notes by commit
 
 

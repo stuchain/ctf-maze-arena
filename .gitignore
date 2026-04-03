@@ -1,6 +1,8 @@
 # Commit plan and phase docs (implementation guide — keep local)
 docs/commit/
 
+# Local SQLite database (created at runtime; see DATABASE_URL in README)
+data/*.db
 
 # Added by cargo
 
