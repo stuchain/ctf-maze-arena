@@ -100,6 +100,16 @@ export default function Home() {
         {error ? <div className="text-red-600">{error}</div> : null}
         <MazeGrid maze={maze} />
 
+        <button
+          onClick={() => {
+            // Commit 60 will wire this to the backend solve API.
+          }}
+          disabled={!mazeId}
+          className="bg-green-500 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Solve
+        </button>
+
         {/* `mazeId` is stored now; Commit 59 will use it for the Solve button. */}
         <div className="text-sm text-zinc-600">
           {mazeId ? `mazeId: ${mazeId}` : 'no maze yet'}
