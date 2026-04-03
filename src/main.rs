@@ -5,7 +5,9 @@ mod solve;
 mod store;
 
 use sqlx::sqlite::SqlitePoolOptions;
+use std::fs;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
@@ -50,6 +52,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 async fn init_db() -> Result<sqlx::SqlitePool, sqlx::Error> {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "sqlite:./data/ctf_maze.db".into());
+
+    // If the DB path points to a file inside a folder (like `./data/ctf_maze.db`),
+    // make sure the folder exists and the DB file exists.
+    //
+    // This prevents startup failures like:
+    // `unable to open database file` when `data/ctf_maze.db` (or its parent dir)
+    // doesn't exist yet.
+    if let Some(path_part) = url.strip_prefix("sqlite:") {
+        // `sqlite://./data/ctf_maze.db` -> `./data/ctf_maze.db`
+        let path_part = path_part.trim_start_matches('/');
+        let db_path = Path::new(path_part);
+
+        if let Some(parent) = db_path.parent() {
+            fs::create_dir_all(parent).map_err(sqlx::Error::Io)?;
+        }
+        if !db_path.exists() {
+            fs::File::create(db_path).map_err(sqlx::Error::Io)?;
+        }
+    }
 
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
