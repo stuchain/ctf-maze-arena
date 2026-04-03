@@ -32,6 +32,7 @@ fn api_routes() -> Router {
     Router::new()
         .route("/health", get(health_handler))
         .route("/maze/generate", post(generate_handler))
+        .route("/maze/:maze_id", get(get_maze_handler))
         .route("/solve", post(solve_handler))
         .route("/solve/stream", get(stream_handler))
         .route("/replay/:run_id", get(replay_handler))
@@ -102,6 +103,33 @@ async fn generate_handler(
         })?;
     let maze_json = serde_json::to_value(&maze).unwrap();
     Ok(Json(GenerateResponse { maze_id, maze: maze_json }))
+}
+
+async fn get_maze_handler(
+    Extension(state): Extension<Arc<AppState>>,
+    Path(maze_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let maze = store::get_maze(&state.db, &maze_id)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "db"})),
+            )
+        })?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "maze not found"})),
+        ))?;
+
+    let maze_json = serde_json::to_value(&maze).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "serialize"})),
+        )
+    })?;
+
+    Ok(Json(maze_json))
 }
 
 #[derive(Debug, Deserialize)]

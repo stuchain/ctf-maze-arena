@@ -5,53 +5,9 @@ import { MazeGrid, type MazeData } from '../components/MazeGrid';
 import { GenerateForm, type GenerateFormParams } from '../components/GenerateForm';
 import { SolverPicker } from '../components/SolverPicker';
 import { useSolveStream } from '../hooks/useSolveStream';
+import { backendMazeToMazeData } from '@/lib/maze';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-
-function toCellTuple(cell: any): [number, number] {
-  if (Array.isArray(cell) && cell.length >= 2) {
-    return [Number(cell[0]), Number(cell[1])];
-  }
-  if (cell && typeof cell === 'object' && 'x' in cell && 'y' in cell) {
-    return [Number(cell.x), Number(cell.y)];
-  }
-  return [0, 0];
-}
-
-function backendMazeToMazeData(backendMaze: any): MazeData {
-  const width = Number(backendMaze?.grid?.width ?? 0);
-  const height = Number(backendMaze?.grid?.height ?? 0);
-
-  const start = toCellTuple(backendMaze?.start);
-  const goal = toCellTuple(backendMaze?.goal);
-
-  // Rust `Walls` serializes as `{ inner: HashSet<Edge> }`.
-  const rawEdges: any[] = Array.isArray(backendMaze?.walls?.inner)
-    ? backendMaze.walls.inner
-    : [];
-
-  const walls: MazeData['walls'] = rawEdges
-    .map((edge: any) => {
-      // Rust tuple structs like `Edge(Cell, Cell)` usually serialize as `[cellA, cellB]`.
-      if (Array.isArray(edge) && edge.length === 2) {
-        return [toCellTuple(edge[0]), toCellTuple(edge[1])] as [
-          [number, number],
-          [number, number],
-        ];
-      }
-      // Fallback for other shapes like `{ 0: cellA, 1: cellB }`.
-      if (edge && typeof edge === 'object' && 0 in edge && 1 in edge) {
-        return [toCellTuple(edge[0]), toCellTuple(edge[1])] as [
-          [number, number],
-          [number, number],
-        ];
-      }
-      return null;
-    })
-    .filter(Boolean) as MazeData['walls'];
-
-  return { width, height, walls, start, goal };
-}
 
 export default function Home() {
   const [solver, setSolver] = useState('ASTAR');
