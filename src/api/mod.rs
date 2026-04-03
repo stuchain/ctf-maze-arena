@@ -47,10 +47,29 @@ pub struct GenerateResponse {
     pub maze: Value,
 }
 
+const MIN_SIZE: usize = 5;
+const MAX_SIZE: usize = 100;
+
+fn validate_generate(req: &GenerateRequest) -> Result<(), String> {
+    if req.w < MIN_SIZE || req.w > MAX_SIZE {
+        return Err(format!("w must be {}..{}", MIN_SIZE, MAX_SIZE));
+    }
+    if req.h < MIN_SIZE || req.h > MAX_SIZE {
+        return Err(format!("h must be {}..{}", MIN_SIZE, MAX_SIZE));
+    }
+    if !["KRUSKAL", "PRIM", "DFS"].contains(&req.algo.as_str()) {
+        return Err("algo must be KRUSKAL, PRIM, or DFS".into());
+    }
+    Ok(())
+}
+
 async fn generate_handler(
     Extension(state): Extension<Arc<AppState>>,
     Json(req): Json<GenerateRequest>,
 ) -> Result<Json<GenerateResponse>, (StatusCode, Json<Value>)> {
+    if let Err(msg) = validate_generate(&req) {
+        return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": msg }))));
+    }
     let algo = match req.algo.as_str() {
         "KRUSKAL" => GeneratorAlgo::Kruskal,
         "PRIM" => GeneratorAlgo::Prim,
