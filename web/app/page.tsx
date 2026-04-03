@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { MazeGrid, type MazeData } from '../components/MazeGrid';
 import { GenerateForm, type GenerateFormParams } from '../components/GenerateForm';
 import { SolverPicker } from '../components/SolverPicker';
+import { useSolveStream } from '../hooks/useSolveStream';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
@@ -62,6 +63,12 @@ export default function Home() {
 
   const [runId, setRunId] = useState<string | null>(null);
   const [solveLoading, setSolveLoading] = useState(false);
+
+  const {
+    status: solveStreamStatus,
+    stats,
+    error: solveStreamError,
+  } = useSolveStream(runId);
 
   const handleGenerate = async (params: GenerateFormParams) => {
     setLoading(true);
@@ -147,6 +154,18 @@ export default function Home() {
         <div className="text-sm text-zinc-600">
           {runId ? `runId: ${runId}` : null}
         </div>
+
+        {runId ? (
+          <div className="text-sm text-zinc-600">
+            stream: {solveStreamStatus}
+            {solveStreamError ? (
+              <span className="text-red-600"> — {solveStreamError}</span>
+            ) : null}
+            {stats && solveStreamStatus === 'finished'
+              ? ` | visited ${stats.visited} cost ${stats.cost} ${stats.ms}ms`
+              : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );
