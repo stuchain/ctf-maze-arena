@@ -66,9 +66,12 @@ export default function Home() {
 
   const {
     status: solveStreamStatus,
+    frames,
     stats,
     error: solveStreamError,
   } = useSolveStream(runId);
+
+  const frame = frames[frames.length - 1];
 
   const handleGenerate = async (params: GenerateFormParams) => {
     setLoading(true);
@@ -109,7 +112,11 @@ export default function Home() {
         <GenerateForm onSubmit={handleGenerate} loading={loading} />
 
         {error ? <div className="text-red-600">{error}</div> : null}
-        <MazeGrid maze={maze} />
+        <MazeGrid
+          maze={maze}
+          frontier={frame?.frontier}
+          visited={frame?.visited}
+        />
 
         <button
           onClick={async () => {

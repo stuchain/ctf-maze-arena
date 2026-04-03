@@ -11,9 +11,26 @@ export interface MazeData {
 
 export interface MazeGridProps {
   maze: MazeData | null;
+  frontier?: [number, number][];
+  visited?: [number, number][];
 }
 
-export function MazeGrid({ maze }: MazeGridProps) {
+function getCellFill(
+  x: number,
+  y: number,
+  start: [number, number],
+  goal: [number, number],
+  frontier?: [number, number][],
+  visited?: [number, number][],
+) {
+  if (start[0] === x && start[1] === y) return '#4ade80';
+  if (goal[0] === x && goal[1] === y) return '#f87171';
+  if (frontier?.some(([fx, fy]) => fx === x && fy === y)) return '#93c5fd';
+  if (visited?.some(([vx, vy]) => vx === x && vy === y)) return '#d1d5db';
+  return '#f0f0f0';
+}
+
+export function MazeGrid({ maze, frontier, visited }: MazeGridProps) {
   if (!maze) return <div>No maze</div>;
 
   const { width, height, walls, start, goal } = maze;
@@ -26,8 +43,6 @@ export function MazeGrid({ maze }: MazeGridProps) {
         {Array.from({ length: width * height }, (_, i) => {
           const x = i % width;
           const y = Math.floor(i / width);
-          const isStart = x === start[0] && y === start[1];
-          const isGoal = x === goal[0] && y === goal[1];
 
           return (
             <rect
@@ -36,7 +51,7 @@ export function MazeGrid({ maze }: MazeGridProps) {
               y={y * cellSize + 1}
               width={cellSize - 1}
               height={cellSize - 1}
-              fill={isStart ? '#4ade80' : isGoal ? '#f87171' : '#f0f0f0'}
+              fill={getCellFill(x, y, start, goal, frontier, visited)}
             />
           );
         })}
