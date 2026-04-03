@@ -169,6 +169,13 @@ async fn solve_handler(
             let _ = frame_tx_bg.send(line);
         }
         let _ = store::save_replay(&db, &run_id_bg, &replay).await;
+        let finished = json!({
+            "type": "finished",
+            "path": replay.path,
+            "stats": replay.stats,
+        })
+        .to_string();
+        let _ = frame_tx_bg.send(finished);
         stream_map.write().await.remove(&run_id_bg);
     });
 
