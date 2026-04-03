@@ -67,6 +67,7 @@ export default function Home() {
   const {
     status: solveStreamStatus,
     frames,
+    path: solvePath,
     stats,
     error: solveStreamError,
   } = useSolveStream(runId);
@@ -117,6 +118,7 @@ export default function Home() {
           frontier={frame?.frontier}
           visited={frame?.visited}
           current={frame?.current}
+          path={solveStreamStatus === 'finished' ? solvePath : undefined}
         />
 
         <button
