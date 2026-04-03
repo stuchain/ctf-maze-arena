@@ -116,6 +116,7 @@ export default function Home() {
           maze={maze}
           frontier={frame?.frontier}
           visited={frame?.visited}
+          current={frame?.current}
         />
 
         <button
