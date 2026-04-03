@@ -1,5 +1,6 @@
 use axum::{
     Extension, Json, Router,
+    extract::{Query, ws::WebSocketUpgrade},
     http::StatusCode,
     routing::{get, post},
 };
@@ -27,6 +28,7 @@ fn api_routes() -> Router {
         .route("/health", get(health_handler))
         .route("/maze/generate", post(generate_handler))
         .route("/solve", post(solve_handler))
+        .route("/solve/stream", get(stream_handler))
 }
 
 async fn health_handler() -> &'static str {
@@ -154,4 +156,25 @@ async fn solve_handler(
     });
 
     Ok(Json(SolveResponse { run_id }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct StreamQuery {
+    #[serde(rename = "runId")]
+    pub run_id: String,
+}
+
+async fn stream_handler(
+    ws: WebSocketUpgrade,
+    Extension(_state): Extension<Arc<AppState>>,
+    Query(q): Query<StreamQuery>,
+) -> axum::response::Response {
+    ws.on_upgrade(move |socket| handle_socket(socket, q.run_id))
+}
+
+async fn handle_socket(mut socket: axum::extract::ws::WebSocket, run_id: String) {
+    let msg = serde_json::json!({"type": "connected", "runId": run_id}).to_string();
+    let _ = socket
+        .send(axum::extract::ws::Message::Text(msg))
+        .await;
 }
