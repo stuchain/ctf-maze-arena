@@ -29,6 +29,7 @@ export default function ReplayPage() {
   const [error, setError] = useState<string | null>(null);
   const [frameIndex, setFrameIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setReplay(null);
@@ -62,6 +63,18 @@ export default function ReplayPage() {
     return () => clearTimeout(t);
   }, [playing, frameIndex, replay?.frames]);
 
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  const handleShare = async () => {
+    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/replay/${runId}`;
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+  };
+
   if (error) return <div>Error: {error}</div>;
   if (!replay || !mazeJson) return <div>Loading...</div>;
 
@@ -74,7 +87,19 @@ export default function ReplayPage() {
 
   return (
     <div className="p-4">
-      <h1>Replay: {runId}</h1>
+      <div className="flex flex-wrap items-center gap-3 mb-2">
+        <h1 className="text-xl font-semibold">Replay: {runId}</h1>
+        <button
+          type="button"
+          className="rounded border border-zinc-400 px-3 py-1 text-sm"
+          onClick={() => void handleShare()}
+        >
+          Share
+        </button>
+        {copied ? (
+          <span className="text-sm text-green-600">Link copied!</span>
+        ) : null}
+      </div>
       <p>
         Solver: {replay.solver} | Visited: {replay.stats?.visited} | Cost:{' '}
         {replay.stats?.cost}
