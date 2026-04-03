@@ -1,6 +1,6 @@
 use axum::{
     Extension, Json, Router,
-    extract::{Query, ws::WebSocketUpgrade},
+    extract::{Path, Query, ws::WebSocketUpgrade},
     http::StatusCode,
     routing::{get, post},
 };
@@ -33,6 +33,7 @@ fn api_routes() -> Router {
         .route("/maze/generate", post(generate_handler))
         .route("/solve", post(solve_handler))
         .route("/solve/stream", get(stream_handler))
+        .route("/replay/:run_id", get(replay_handler))
 }
 
 async fn health_handler() -> &'static str {
@@ -180,6 +181,25 @@ async fn solve_handler(
     });
 
     Ok(Json(SolveResponse { run_id }))
+}
+
+async fn replay_handler(
+    Extension(state): Extension<Arc<AppState>>,
+    Path(run_id): Path<String>,
+) -> Result<Json<crate::replay::Replay>, (StatusCode, Json<Value>)> {
+    let replay = store::get_replay(&state.db, &run_id)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "db"})),
+            )
+        })?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "replay not found"})),
+        ))?;
+    Ok(Json(replay))
 }
 
 #[derive(Debug, Deserialize)]
