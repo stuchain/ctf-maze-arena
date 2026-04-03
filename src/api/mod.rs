@@ -26,6 +26,7 @@ fn api_routes() -> Router {
     Router::new()
         .route("/health", get(health_handler))
         .route("/maze/generate", post(generate_handler))
+        .route("/solve", post(solve_handler))
 }
 
 async fn health_handler() -> &'static str {
@@ -92,4 +93,65 @@ async fn generate_handler(
         })?;
     let maze_json = serde_json::to_value(&maze).unwrap();
     Ok(Json(GenerateResponse { maze_id, maze: maze_json }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SolveRequest {
+    pub maze_id: String,
+    pub solver: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SolveResponse {
+    pub run_id: String,
+}
+
+async fn solve_handler(
+    Extension(state): Extension<Arc<AppState>>,
+    Json(req): Json<SolveRequest>,
+) -> Result<Json<SolveResponse>, (StatusCode, Json<Value>)> {
+    let maze = store::get_maze(&state.db, &req.maze_id)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "db"})),
+            )
+        })?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "maze not found"})),
+        ))?;
+
+    let solver = state
+        .solvers
+        .get(&req.solver)
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "unknown solver"})),
+        ))?
+        .clone();
+
+    let run_id = store::create_run(&state.db, &req.maze_id, &req.solver)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+        })?;
+
+    let db = state.db.clone();
+    let maze_id = req.maze_id.clone();
+    let solver_name = req.solver.clone();
+    let run_id_bg = run_id.clone();
+    tokio::spawn(async move {
+        let result = solver.solve(&maze);
+        let _ = store::update_run_stats(&db, &run_id_bg, &result.stats).await;
+        let replay = crate::replay::build_replay(&maze_id, &solver_name, 0, result, 5);
+        let _ = store::save_replay(&db, &run_id_bg, &replay).await;
+    });
+
+    Ok(Json(SolveResponse { run_id }))
 }
