@@ -5,7 +5,9 @@ mod solve;
 mod store;
 
 use sqlx::sqlite::SqlitePoolOptions;
+use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -25,6 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let state = Arc::new(api::AppState {
         db: pool,
         solvers: solve::default_registry(),
+        stream_broadcasts: Arc::new(RwLock::new(HashMap::new())),
     });
 
     let app = api::router(state);

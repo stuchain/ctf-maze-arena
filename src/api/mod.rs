@@ -6,7 +6,9 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::{RwLock, broadcast};
 
 use crate::maze::gen::{GeneratorAlgo, generate};
 use crate::store;
@@ -14,6 +16,8 @@ use crate::store;
 pub struct AppState {
     pub db: sqlx::SqlitePool,
     pub solvers: crate::solve::SolverRegistry,
+    /// Per-run broadcast senders so WebSocket clients can subscribe to frame JSON lines.
+    pub stream_broadcasts: Arc<RwLock<HashMap<String, broadcast::Sender<String>>>>,
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
@@ -148,11 +152,24 @@ async fn solve_handler(
     let maze_id = req.maze_id.clone();
     let solver_name = req.solver.clone();
     let run_id_bg = run_id.clone();
+    let (frame_tx, _) = broadcast::channel::<String>(4096);
+    {
+        let mut guard = state.stream_broadcasts.write().await;
+        guard.insert(run_id.clone(), frame_tx.clone());
+    }
+
+    let stream_map = state.stream_broadcasts.clone();
+    let frame_tx_bg = frame_tx.clone();
     tokio::spawn(async move {
         let result = solver.solve(&maze);
         let _ = store::update_run_stats(&db, &run_id_bg, &result.stats).await;
         let replay = crate::replay::build_replay(&maze_id, &solver_name, 0, result, 5);
+        for f in &replay.frames {
+            let line = json!({"type": "frame", "data": f}).to_string();
+            let _ = frame_tx_bg.send(line);
+        }
         let _ = store::save_replay(&db, &run_id_bg, &replay).await;
+        stream_map.write().await.remove(&run_id_bg);
     });
 
     Ok(Json(SolveResponse { run_id }))
@@ -166,15 +183,48 @@ pub struct StreamQuery {
 
 async fn stream_handler(
     ws: WebSocketUpgrade,
-    Extension(_state): Extension<Arc<AppState>>,
+    Extension(state): Extension<Arc<AppState>>,
     Query(q): Query<StreamQuery>,
 ) -> axum::response::Response {
-    ws.on_upgrade(move |socket| handle_socket(socket, q.run_id))
+    let state = Arc::clone(&state);
+    let run_id = q.run_id.clone();
+    ws.on_upgrade(move |socket| handle_socket(socket, state, run_id))
 }
 
-async fn handle_socket(mut socket: axum::extract::ws::WebSocket, run_id: String) {
-    let msg = serde_json::json!({"type": "connected", "runId": run_id}).to_string();
-    let _ = socket
-        .send(axum::extract::ws::Message::Text(msg))
-        .await;
+async fn handle_socket(
+    mut socket: axum::extract::ws::WebSocket,
+    state: Arc<AppState>,
+    run_id: String,
+) {
+    use axum::extract::ws::Message;
+    use broadcast::error::RecvError;
+
+    let hello = json!({"type": "connected", "runId": run_id}).to_string();
+    if socket.send(Message::Text(hello)).await.is_err() {
+        return;
+    }
+
+    let mut rx = {
+        let map = state.stream_broadcasts.read().await;
+        match map.get(&run_id) {
+            Some(tx) => tx.subscribe(),
+            None => {
+                let err = json!({"type": "error", "error": "unknown or completed runId"}).to_string();
+                let _ = socket.send(Message::Text(err)).await;
+                return;
+            }
+        }
+    };
+
+    loop {
+        match rx.recv().await {
+            Ok(text) => {
+                if socket.send(Message::Text(text)).await.is_err() {
+                    break;
+                }
+            }
+            Err(RecvError::Lagged(_)) => continue,
+            Err(RecvError::Closed) => break,
+        }
+    }
 }
