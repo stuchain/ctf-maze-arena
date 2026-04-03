@@ -299,6 +299,7 @@ async fn handle_socket(
     loop {
         match rx.recv().await {
             Ok(text) => {
+                // Client disconnected: stop forwarding; solver task may still finish and persist replay.
                 if socket.send(Message::Text(text)).await.is_err() {
                     break;
                 }
