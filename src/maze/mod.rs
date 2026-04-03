@@ -20,11 +20,12 @@ impl Cell {
 }
 
 /// Flat grid: index = y * width + x. Dimensions (width, height).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Grid {
     pub width: usize,
     pub height: usize,
     /// Optional: store cell data. For now, just dimensions.
+    #[serde(skip)]
     _data: Vec<()>,
 }
 
@@ -128,6 +129,7 @@ impl Walls {
 }
 
 /// Maze: grid + walls + start and goal cells.
+#[derive(Debug, Serialize)]
 pub struct Maze {
     pub grid: Grid,
     pub walls: Walls,

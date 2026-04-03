@@ -1,5 +1,14 @@
-use axum::{Extension, Router, routing::get};
+use axum::{
+    Extension, Json, Router,
+    http::StatusCode,
+    routing::{get, post},
+};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use std::sync::Arc;
+
+use crate::maze::gen::{GeneratorAlgo, generate};
+use crate::store;
 
 pub struct AppState {
     pub db: sqlx::SqlitePool,
@@ -14,9 +23,54 @@ pub fn router(state: Arc<AppState>) -> Router {
 }
 
 fn api_routes() -> Router {
-    Router::new().route("/health", get(health_handler))
+    Router::new()
+        .route("/health", get(health_handler))
+        .route("/maze/generate", post(generate_handler))
 }
 
 async fn health_handler() -> &'static str {
     "ok"
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GenerateRequest {
+    pub w: usize,
+    pub h: usize,
+    pub seed: u64,
+    pub algo: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateResponse {
+    pub maze_id: String,
+    pub maze: Value,
+}
+
+async fn generate_handler(
+    Extension(state): Extension<Arc<AppState>>,
+    Json(req): Json<GenerateRequest>,
+) -> Result<Json<GenerateResponse>, (StatusCode, Json<Value>)> {
+    let algo = match req.algo.as_str() {
+        "KRUSKAL" => GeneratorAlgo::Kruskal,
+        "PRIM" => GeneratorAlgo::Prim,
+        "DFS" => GeneratorAlgo::Dfs,
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "unknown algo"})),
+            ))
+        }
+    };
+    let maze = generate(req.w, req.h, req.seed, algo);
+    let maze_id = store::store_maze(&state.db, &maze, req.seed, &req.algo)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+        })?;
+    let maze_json = serde_json::to_value(&maze).unwrap();
+    Ok(Json(GenerateResponse { maze_id, maze: maze_json }))
 }
