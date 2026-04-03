@@ -60,9 +60,13 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [runId, setRunId] = useState<string | null>(null);
+  const [solveLoading, setSolveLoading] = useState(false);
+
   const handleGenerate = async (params: GenerateFormParams) => {
     setLoading(true);
     setError(null);
+    setRunId(null);
 
     try {
       const res = await fetch(`${API}/api/maze/generate`, {
@@ -101,18 +105,47 @@ export default function Home() {
         <MazeGrid maze={maze} />
 
         <button
-          onClick={() => {
-            // Commit 60 will wire this to the backend solve API.
+          onClick={async () => {
+            if (!mazeId) return;
+            if (solveLoading) return;
+
+            setSolveLoading(true);
+            setError(null);
+            setRunId(null);
+
+            try {
+              const res = await fetch(`${API}/api/solve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mazeId, solver }),
+              });
+
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error((err as any).error || res.statusText);
+              }
+
+              const data = await res.json();
+              setRunId(data.runId);
+            } catch (e: any) {
+              setError(e?.message ?? 'Solve failed');
+            } finally {
+              setSolveLoading(false);
+            }
           }}
-          disabled={!mazeId}
+          disabled={!mazeId || solveLoading}
           className="bg-green-500 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Solve
+          {solveLoading ? 'Solving...' : 'Solve'}
         </button>
 
         {/* `mazeId` is stored now; Commit 59 will use it for the Solve button. */}
         <div className="text-sm text-zinc-600">
           {mazeId ? `mazeId: ${mazeId}` : 'no maze yet'}
+        </div>
+
+        <div className="text-sm text-zinc-600">
+          {runId ? `runId: ${runId}` : null}
         </div>
       </div>
     </div>
