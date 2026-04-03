@@ -1,13 +1,17 @@
+mod api;
 mod maze;
-mod solve;
 mod replay;
+mod solve;
 mod store;
 
 use sqlx::sqlite::SqlitePoolOptions;
+use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    dotenvy::dotenv().ok();
+
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
             std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
@@ -15,14 +19,20 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    dotenvy::dotenv().ok();
+    let pool = init_db().await?;
+    tracing::info!("database initialized");
 
-    match init_db().await {
-        Ok(_) => tracing::info!("database initialized"),
-        Err(e) => tracing::warn!("database init failed: {e}"),
-    }
+    let state = Arc::new(api::AppState {
+        db: pool,
+        solvers: solve::default_registry(),
+    });
 
-    tracing::info!("server starting");
+    let app = api::router(state);
+    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 8080));
+    tracing::info!("listening on {}", addr);
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
+    Ok(())
 }
 
 async fn init_db() -> Result<sqlx::SqlitePool, sqlx::Error> {
