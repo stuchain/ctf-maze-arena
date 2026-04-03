@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 
 use crate::maze::gen::{GeneratorAlgo, generate};
+use crate::solve::SolveStats;
 use crate::store;
 
 pub struct AppState {
@@ -34,6 +35,7 @@ fn api_routes() -> Router {
         .route("/solve", post(solve_handler))
         .route("/solve/stream", get(stream_handler))
         .route("/replay/:run_id", get(replay_handler))
+        .route("/leaderboard", get(leaderboard_handler))
 }
 
 async fn health_handler() -> &'static str {
@@ -200,6 +202,57 @@ async fn replay_handler(
             Json(json!({"error": "replay not found"})),
         ))?;
     Ok(Json(replay))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LeaderboardQuery {
+    #[serde(rename = "mazeId")]
+    pub maze_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeaderboardEntry {
+    pub run_id: String,
+    pub solver: String,
+    pub cost: usize,
+    pub ms: u64,
+    pub visited: usize,
+}
+
+async fn leaderboard_handler(
+    Extension(state): Extension<Arc<AppState>>,
+    Query(q): Query<LeaderboardQuery>,
+) -> Result<Json<Vec<LeaderboardEntry>>, StatusCode> {
+    let rows = sqlx::query_as::<_, (String, String, Option<String>)>(
+        "SELECT r.id, r.solver, r.stats_json FROM runs r WHERE r.maze_id = ? AND r.status = 'completed'",
+    )
+    .bind(&q.maze_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut entries: Vec<LeaderboardEntry> = rows
+        .into_iter()
+        .filter_map(|(id, solver, stats_json)| {
+            let stats_json = stats_json?;
+            let stats: SolveStats = serde_json::from_str(&stats_json).ok()?;
+            Some(LeaderboardEntry {
+                run_id: id,
+                solver,
+                cost: stats.cost,
+                ms: stats.ms,
+                visited: stats.visited,
+            })
+        })
+        .collect();
+    entries.sort_by(|a, b| {
+        a.cost
+            .cmp(&b.cost)
+            .then(a.ms.cmp(&b.ms))
+            .then(a.visited.cmp(&b.visited))
+    });
+    Ok(Json(entries.into_iter().take(50).collect()))
 }
 
 #[derive(Debug, Deserialize)]
