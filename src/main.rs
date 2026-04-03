@@ -8,6 +8,7 @@ use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -30,7 +31,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         stream_broadcasts: Arc::new(RwLock::new(HashMap::new())),
     });
 
-    let app = api::router(state);
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([
+            axum::http::Method::GET,
+            axum::http::Method::POST,
+        ])
+        .allow_headers([axum::http::header::CONTENT_TYPE]);
+
+    let app = api::router(state).layer(cors);
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 8080));
     tracing::info!("listening on {}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
