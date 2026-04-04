@@ -31,6 +31,20 @@ Build an interactive maze arena to generate mazes, run multiple solvers, and com
 - Backend API + WebSocket: Axum routes under `/api` (maze generate/solve, `/api/replay/:run_id`, `/api/leaderboard`, and `GET /api/solve/stream`).
 - Frontend: Next.js core UI components for generating a maze, drawing it, choosing a solver, and triggering solve.
 
+## Benchmarks
+
+Run `cargo bench` for full Criterion output (HTML reports under `target/criterion/` when enabled). Example below used `cargo bench` with shorter warm-up/measurement windows (30 samples); **release** profile, **Windows 11 x86_64**, local dev machine.
+
+| Benchmark       | Mean (ms) | Std (ms) |
+|-----------------|-----------|----------|
+| kruskal_10x10   | 0.026     | 0.001    |
+| kruskal_50x50   | 0.91      | 0.02     |
+| prim_10x10      | 0.059     | 0.002    |
+| dfs_10x10       | 0.051     | 0.002    |
+| bfs_20x20       | 0.53      | 0.03     |
+| dfs_20x20       | 0.17      | 0.004    |
+| astar_20x20     | 0.24      | 0.005    |
+
 ## Quick Start
 
 ### Backend
