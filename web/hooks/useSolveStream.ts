@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { checkAndAward } from '@/lib/achievements';
 import { createSolveStreamUrl } from '@/lib/ws';
 
 export type StreamStatus = 'idle' | 'connecting' | 'active' | 'finished' | 'error';
@@ -52,7 +53,10 @@ function normalizeFrame(data: unknown): SolveFrame {
   };
 }
 
-export function useSolveStream(runId: string | null): UseSolveStreamResult {
+export function useSolveStream(
+  runId: string | null,
+  solver: string | null,
+): UseSolveStreamResult {
   const [status, setStatus] = useState<StreamStatus>('idle');
   const [frames, setFrames] = useState<SolveFrame[]>([]);
   const [path, setPath] = useState<[number, number][]>([]);
@@ -111,10 +115,14 @@ export function useSolveStream(runId: string | null): UseSolveStreamResult {
           setPath(pathRaw.map((c) => normalizeCell(c)));
           const s = msg.stats as Record<string, unknown> | undefined;
           if (s) {
-            setStats({
-              visited: Number(s.visited ?? 0),
-              cost: Number(s.cost ?? 0),
-              ms: Number(s.ms ?? 0),
+            const visited = Number(s.visited ?? 0);
+            const cost = Number(s.cost ?? 0);
+            const ms = Number(s.ms ?? 0);
+            setStats({ visited, cost, ms });
+            checkAndAward({
+              visited,
+              cost,
+              solver: solver ?? '',
             });
           } else {
             setStats(null);
@@ -142,7 +150,7 @@ export function useSolveStream(runId: string | null): UseSolveStreamResult {
     return () => {
       ws.close();
     };
-  }, [runId]);
+  }, [runId, solver]);
 
   return { status, frames, path, stats, error };
 }

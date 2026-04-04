@@ -45,7 +45,7 @@ export default function Home() {
     path: solvePath,
     stats,
     error: solveStreamError,
-  } = useSolveStream(runId);
+  } = useSolveStream(runId, solver);
 
   const frame = frames[frames.length - 1];
 
