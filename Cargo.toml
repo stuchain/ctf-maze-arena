@@ -23,3 +23,7 @@ criterion = { version = "0.4", features = ["html_reports"] }
 [[bench]]
 name = "maze_gen"
 harness = false
+
+[[bench]]
+name = "solvers"
+harness = false

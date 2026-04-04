@@ -11,10 +11,10 @@ pub mod dp;
 #[cfg(test)]
 mod tests;
 
-use astar::AstarSolver;
-use bfs::BfsSolver;
-use dfs::DfsSolver;
-use dp::DpKeysSolver;
+pub use astar::AstarSolver;
+pub use bfs::BfsSolver;
+pub use dfs::DfsSolver;
+pub use dp::DpKeysSolver;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SolveStats {
