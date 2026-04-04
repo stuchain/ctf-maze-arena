@@ -1,12 +1,8 @@
-mod api;
-mod maze;
-mod replay;
-mod solve;
-mod store;
-
+use ctf_maze_arena::api;
+use ctf_maze_arena::solve;
 use sqlx::sqlite::SqlitePoolOptions;
-use std::fs;
 use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
