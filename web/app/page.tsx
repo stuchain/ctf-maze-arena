@@ -21,6 +21,10 @@ export default function Home() {
   const [runId, setRunId] = useState<string | null>(null);
   const [solveLoading, setSolveLoading] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [dailyInfo, setDailyInfo] = useState<{
+    seed: number;
+    date: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!mazeId) {
@@ -77,10 +81,41 @@ export default function Home() {
     }
   };
 
+  const handleDaily = async () => {
+    setError(null);
+    try {
+      const res = await fetch(`${API}/api/daily`);
+      if (!res.ok) throw new Error('Daily challenge unavailable');
+      const data = await res.json();
+      const seed = Number(data.seed);
+      const w = Number(data.w);
+      const h = Number(data.h);
+      setDailyInfo({ seed, date: String(data.date ?? '') });
+      await handleGenerate({ w, h, seed, algo: 'KRUSKAL' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Daily challenge failed';
+      setError(msg);
+    }
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <div className="flex flex-col items-center gap-6 p-8">
         <SolverPicker value={solver} onChange={setSolver} />
+        <button
+          type="button"
+          onClick={() => void handleDaily()}
+          disabled={loading}
+          className="rounded bg-violet-600 px-4 py-2 text-white text-sm disabled:opacity-50"
+        >
+          Daily Challenge
+        </button>
+        {dailyInfo ? (
+          <p className="text-sm text-zinc-600">
+            Today&apos;s seed: {dailyInfo.seed}
+            {dailyInfo.date ? ` (${dailyInfo.date})` : null}
+          </p>
+        ) : null}
         <GenerateForm onSubmit={handleGenerate} loading={loading} />
 
         {error ? <div className="text-red-600">{error}</div> : null}
