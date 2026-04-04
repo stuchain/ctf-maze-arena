@@ -157,6 +157,7 @@ async fn get_maze_handler(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SolveRequest {
     pub maze_id: String,
     pub solver: String,
