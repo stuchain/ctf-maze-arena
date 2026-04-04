@@ -37,10 +37,34 @@ fn api_routes() -> Router {
         .route("/solve/stream", get(stream_handler))
         .route("/replay/:run_id", get(replay_handler))
         .route("/leaderboard", get(leaderboard_handler))
+        .route("/daily", get(daily_handler))
 }
 
 async fn health_handler() -> &'static str {
     "ok"
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DailyResponse {
+    seed: u64,
+    date: String,
+    w: u32,
+    h: u32,
+}
+
+async fn daily_handler() -> Json<DailyResponse> {
+    let now = chrono::Utc::now();
+    let date_str = now.format("%Y-%m-%d").to_string();
+    let seed = date_str
+        .bytes()
+        .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+    Json(DailyResponse {
+        seed,
+        date: date_str,
+        w: 15,
+        h: 15,
+    })
 }
 
 #[derive(Debug, Deserialize)]
