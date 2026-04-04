@@ -47,6 +47,8 @@ Run `cargo bench` for full Criterion output (HTML reports under `target/criterio
 
 ## Quick Start
 
+Copy [`.env.example`](.env.example) to `.env` in the repo root and adjust values (optional; defaults match the example for local dev).
+
 ### Backend
 ```bash
 cargo run
