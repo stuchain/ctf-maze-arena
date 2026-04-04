@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Achievements } from '../components/Achievements';
 import { Leaderboard, type LeaderboardEntry } from '../components/Leaderboard';
 import { MazeGrid, type MazeData } from '../components/MazeGrid';
 import { GenerateForm, type GenerateFormParams } from '../components/GenerateForm';
@@ -25,6 +26,7 @@ export default function Home() {
     seed: number;
     date: string;
   } | null>(null);
+  const [achievementsRefresh, setAchievementsRefresh] = useState(0);
 
   useEffect(() => {
     if (!mazeId) {
@@ -46,6 +48,12 @@ export default function Home() {
     stats,
     error: solveStreamError,
   } = useSolveStream(runId, solver);
+
+  useEffect(() => {
+    if (solveStreamStatus === 'finished') {
+      setAchievementsRefresh((v) => v + 1);
+    }
+  }, [solveStreamStatus]);
 
   const frame = frames[frames.length - 1];
 
@@ -170,6 +178,8 @@ export default function Home() {
         <div className="text-sm text-zinc-600">
           {runId ? `runId: ${runId}` : null}
         </div>
+
+        <Achievements refreshVersion={achievementsRefresh} />
 
         <div className="w-full max-w-md">
           <h2 className="text-sm font-semibold text-zinc-700 mb-2">Leaderboard</h2>
