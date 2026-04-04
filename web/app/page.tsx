@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Leaderboard, type LeaderboardEntry } from '../components/Leaderboard';
 import { MazeGrid, type MazeData } from '../components/MazeGrid';
 import { GenerateForm, type GenerateFormParams } from '../components/GenerateForm';
 import { SolverPicker } from '../components/SolverPicker';
@@ -19,6 +20,20 @@ export default function Home() {
 
   const [runId, setRunId] = useState<string | null>(null);
   const [solveLoading, setSolveLoading] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+
+  useEffect(() => {
+    if (!mazeId) {
+      setLeaderboard([]);
+      return;
+    }
+    fetch(`${API}/api/leaderboard?mazeId=${encodeURIComponent(mazeId)}`)
+      .then((r) => (r.ok ? r.json() : Promise.resolve([])))
+      .then((data) =>
+        setLeaderboard(Array.isArray(data) ? data : []),
+      )
+      .catch(() => setLeaderboard([]));
+  }, [mazeId]);
 
   const {
     status: solveStreamStatus,
@@ -119,6 +134,11 @@ export default function Home() {
 
         <div className="text-sm text-zinc-600">
           {runId ? `runId: ${runId}` : null}
+        </div>
+
+        <div className="w-full max-w-md">
+          <h2 className="text-sm font-semibold text-zinc-700 mb-2">Leaderboard</h2>
+          <Leaderboard entries={leaderboard} />
         </div>
 
         {runId ? (
