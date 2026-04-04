@@ -1,35 +1,48 @@
 # ctf-maze-arena
 
-`ctf-maze-arena` is a maze algorithm playground. The Rust backend currently includes maze core data structures, deterministic generators, validation utilities, and solvers (BFS, DFS, A*, DP with keys/doors).
+Interactive maze playground: generate seeded mazes (Kruskal, Prim, DFS), run solvers (BFS, DFS, A*, DP with keys/doors), stream solve animation over WebSocket, and browse leaderboards, replays, and a daily challenge. A Next.js UI talks to a Rust (Axum) backend with SQLite persistence.
 
-The Next.js frontend is scaffolded, with the interactive arena UI and full integration in progress.
+## Tech stack
 
-## Goal
+- **Backend:** Rust, Axum, SQLx + SQLite, Tokio, serde/json
+- **Frontend:** Next.js (React), TypeScript
+- **Tooling:** Criterion benchmarks (`cargo bench`), sqlx migrations
 
-Build an interactive maze arena to generate mazes, run multiple solvers, and compare solver behavior/performance.
+## Prerequisites
 
-## Current Status
+- **Rust** (stable) and **Cargo**
+- **Node.js** and **npm** (for `web/`)
+- Optional: **SQLite** file path you can write to (default `./data/ctf_maze.db`; parent directory is created on startup)
 
-- Core maze and solver logic is implemented and tested in Rust.
-- Key/door puzzle support is implemented in the maze model and DP solver.
-- Frontend exists as a Next.js app; core UI for generating a maze and starting a solve is implemented.
-- Backend now includes replay + persistence modules (SQLite/sqlx) and also exposes an API/WebSocket under `/api` for:
-  - maze generation
-  - starting a solve job
-  - streaming solve progress over WebSocket
-  - fetching stored replays
-  - returning a leaderboard
+## Documentation
 
-## Built So Far
+- [docs/API.md](docs/API.md) — HTTP and WebSocket API overview
+- [docs/ALGORITHMS.md](docs/ALGORITHMS.md) — maze generation and solver notes
 
-- Maze core: `Cell`, `Grid`, `Walls`, `Maze`, plus key/door support.
-- Generators: Kruskal, Prim, DFS backtracker (seeded/deterministic).
-- Validators: connectivity, wall symmetry, start-to-goal reachability.
-- Solvers: BFS, DFS, A*, DP (keys/doors state with bitmask).
-- Tests: unit/integration-style tests across maze + solver modules.
-- Replay + persistence: replay frames/JSON and SQLite (migrations + `src/store`) for mazes/runs/replays.
-- Backend API + WebSocket: Axum routes under `/api` (maze generate/solve, `/api/replay/:run_id`, `/api/leaderboard`, and `GET /api/solve/stream`).
-- Frontend: Next.js core UI components for generating a maze, drawing it, choosing a solver, and triggering solve.
+## Quick start
+
+1. Copy [`.env.example`](.env.example) to `.env` in the repo root and adjust if needed (`DATABASE_URL`, `PORT`, `RUST_LOG`). For the frontend, use `web/.env.local` with `NEXT_PUBLIC_API_URL` (default `http://localhost:8080`).
+2. **Backend:** from the repo root:
+
+```bash
+cargo run
+```
+
+The server listens on `0.0.0.0` and the port from `PORT` (default **8080**). Migrations run automatically. Endpoints are under `/api`.
+
+3. **Frontend:**
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+4. **Tests:**
+
+```bash
+cargo test
+```
 
 ## Benchmarks
 
@@ -45,41 +58,19 @@ Run `cargo bench` for full Criterion output (HTML reports under `target/criterio
 | dfs_20x20       | 0.17      | 0.004    |
 | astar_20x20     | 0.24      | 0.005    |
 
-## Quick Start
+## Project structure
 
-Copy [`.env.example`](.env.example) to `.env` in the repo root and adjust values (optional; defaults match the example for local dev).
+- `src/lib.rs` — library crate (maze, solvers, API, store, replay) used by the binary and benchmarks
+- `src/main.rs` — HTTP server entrypoint
+- `src/maze/` — maze model, generation, validation
+- `src/solve/` — solver trait, registry, BFS / DFS / A* / DP
+- `src/api/` — Axum REST + WebSocket
+- `src/replay/` — replay JSON format
+- `src/store/` — SQLite persistence
+- `migrations/` — sqlx migrations
+- `benches/` — Criterion benchmarks (`maze_gen`, `solvers`)
+- `web/` — Next.js app (`web/components/`, `web/app/`, …)
 
-### Backend
-```bash
-cargo run
-```
-If using persistence, set `DATABASE_URL` (default: `sqlite:./data/ctf_maze.db`).
-The backend will create the `data/` folder and the SQLite DB file if they don’t exist yet.
-Migrations run automatically on backend startup.
-Backend listens on `http://localhost:8080` and serves endpoints under `/api`.
+## License
 
-Run backend tests:
-```bash
-cargo test
-```
-
-### Frontend
-```bash
-cd web
-npm install
-npm run dev
-```
-The frontend calls the backend using `NEXT_PUBLIC_API_URL` (default: `http://localhost:8080`).
-
-## Project Structure
-
-- `src/maze/` - maze model, generation, validation
-- `src/solve/` - solver trait, registry, BFS/DFS/A*/DP solvers
-- `src/api/` - Axum REST/WebSocket API under `/api`
-- `src/replay/` - replay frame + JSON replay format
-- `src/store/` - SQLite/sqlx persistence for mazes/runs/replays
-- `migrations/` - SQLite schema migrations used by the backend
-- `web/` - Next.js frontend scaffold
-- `web/components/` - core UI components (maze drawing, solver picker, generate form)
-
-
+This project is licensed under the MIT License — see [LICENSE](LICENSE).
