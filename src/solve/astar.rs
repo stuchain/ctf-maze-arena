@@ -19,7 +19,10 @@ impl PartialOrd for Item {
 
 impl Ord for Item {
     fn cmp(&self, other: &Self) -> Ordering {
-        other.f.cmp(&self.f).then_with(|| other.cell.x.cmp(&self.cell.x))
+        other
+            .f
+            .cmp(&self.f)
+            .then_with(|| other.cell.x.cmp(&self.cell.x))
     }
 }
 
@@ -79,4 +82,3 @@ impl Solver for AstarSolver {
         }
     }
 }
-

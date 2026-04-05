@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-pub mod bfs;
 pub mod astar;
+pub mod bfs;
 pub mod dfs;
 pub mod dp;
 
@@ -98,4 +98,3 @@ impl Solver for StubSolver {
         }
     }
 }
-

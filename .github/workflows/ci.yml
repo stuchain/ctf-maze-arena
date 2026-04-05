@@ -18,5 +18,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
+      - name: Check formatting
+        run: cargo fmt --all -- --check
       - name: Run tests
         run: cargo test --workspace

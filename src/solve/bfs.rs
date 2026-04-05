@@ -20,10 +20,7 @@ impl Solver for BfsSolver {
         while let Some(cell) = queue.pop_front() {
             frames.push(SolveFrame {
                 t,
-                frontier: queue
-                    .iter()
-                    .map(|&c| cell_to_arr(c))
-                    .collect(),
+                frontier: queue.iter().map(|&c| cell_to_arr(c)).collect(),
                 visited: visited.iter().map(|&c| cell_to_arr(c)).collect(),
                 current: Some(cell_to_arr(cell)),
             });
@@ -93,4 +90,3 @@ mod tests {
         assert!(!result.frames.is_empty());
     }
 }
-

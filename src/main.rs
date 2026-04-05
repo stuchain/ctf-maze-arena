@@ -31,10 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_methods([
-            axum::http::Method::GET,
-            axum::http::Method::POST,
-        ])
+        .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
         .allow_headers([axum::http::header::CONTENT_TYPE]);
 
     let app = api::router(state).layer(cors);
@@ -50,8 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 }
 
 async fn init_db() -> Result<sqlx::SqlitePool, sqlx::Error> {
-    let url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite:./data/ctf_maze.db".into());
+    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:./data/ctf_maze.db".into());
 
     // If the DB path points to a file inside a folder (like `./data/ctf_maze.db`),
     // make sure the folder exists and the DB file exists.

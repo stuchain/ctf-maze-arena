@@ -1,16 +1,16 @@
 use axum::{
-    Extension, Json, Router,
-    extract::{Path, Query, ws::WebSocketUpgrade},
+    extract::{ws::WebSocketUpgrade, Path, Query},
     http::StatusCode,
     routing::{get, post},
+    Extension, Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, broadcast};
+use tokio::sync::{broadcast, RwLock};
 
-use crate::maze::gen::{GeneratorAlgo, generate};
+use crate::maze::gen::{generate, GeneratorAlgo};
 use crate::solve::SolveStats;
 use crate::store;
 
@@ -22,10 +22,7 @@ pub struct AppState {
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
-    Router::new().nest(
-        "/api",
-        api_routes().layer(Extension(state)),
-    )
+    Router::new().nest("/api", api_routes().layer(Extension(state)))
 }
 
 fn api_routes() -> Router {
@@ -126,7 +123,10 @@ async fn generate_handler(
             )
         })?;
     let maze_json = serde_json::to_value(&maze).unwrap();
-    Ok(Json(GenerateResponse { maze_id, maze: maze_json }))
+    Ok(Json(GenerateResponse {
+        maze_id,
+        maze: maze_json,
+    }))
 }
 
 async fn get_maze_handler(
@@ -342,7 +342,8 @@ async fn handle_socket(
         match map.get(&run_id) {
             Some(tx) => tx.subscribe(),
             None => {
-                let err = json!({"type": "error", "error": "unknown or completed runId"}).to_string();
+                let err =
+                    json!({"type": "error", "error": "unknown or completed runId"}).to_string();
                 let _ = socket.send(Message::Text(err)).await;
                 return;
             }

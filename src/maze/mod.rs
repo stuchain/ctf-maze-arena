@@ -86,7 +86,9 @@ pub struct Walls {
 
 impl Walls {
     pub fn new() -> Self {
-        Self { inner: HashSet::new() }
+        Self {
+            inner: HashSet::new(),
+        }
     }
 
     pub fn has_wall(&self, a: Cell, b: Cell) -> bool {

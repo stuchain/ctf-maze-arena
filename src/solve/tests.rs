@@ -1,9 +1,9 @@
+use crate::maze::Maze;
 use crate::maze::{generate, GeneratorAlgo};
 use crate::solve::astar::AstarSolver;
 use crate::solve::bfs::BfsSolver;
 use crate::solve::dfs::DfsSolver;
 use crate::solve::{default_registry, Solver, StubSolver};
-use crate::maze::Maze;
 
 #[test]
 fn bfs_finds_path() {

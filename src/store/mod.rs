@@ -1,8 +1,8 @@
 use crate::maze::Maze;
-use crate::solve::SolveStats;
 use crate::replay;
-use sqlx::SqlitePool;
+use crate::solve::SolveStats;
 use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
 use uuid::Uuid;
 
 pub type MazeId = String;
@@ -49,10 +49,7 @@ pub async fn store_maze(
     Ok(id)
 }
 
-pub async fn get_maze(
-    pool: &SqlitePool,
-    id: &str,
-) -> Result<Option<Maze>, sqlx::Error> {
+pub async fn get_maze(pool: &SqlitePool, id: &str) -> Result<Option<Maze>, sqlx::Error> {
     let row = sqlx::query_as::<_, (i64, i64, String, String, String)>(
         "SELECT width, height, walls_json, keys_json, doors_json FROM mazes WHERE id = ?",
     )
@@ -100,10 +97,7 @@ pub async fn update_run_stats(
     Ok(())
 }
 
-pub async fn get_run(
-    pool: &SqlitePool,
-    run_id: &str,
-) -> Result<Option<RunMetadata>, sqlx::Error> {
+pub async fn get_run(pool: &SqlitePool, run_id: &str) -> Result<Option<RunMetadata>, sqlx::Error> {
     let row = sqlx::query_as::<_, (String, String, Option<String>, String)>(
         "SELECT id, maze_id, stats_json, solver FROM runs WHERE id = ?",
     )
@@ -115,8 +109,7 @@ pub async fn get_run(
         return Ok(None);
     };
 
-    let stats = stats_json
-        .and_then(|s| serde_json::from_str::<SolveStats>(&s).ok());
+    let stats = stats_json.and_then(|s| serde_json::from_str::<SolveStats>(&s).ok());
 
     Ok(Some(RunMetadata {
         id,
@@ -134,14 +127,12 @@ pub async fn save_replay(
     let id = Uuid::new_v4().to_string();
     let json = replay::to_json(replay).expect("replay JSON should serialize");
 
-    sqlx::query(
-        "INSERT OR REPLACE INTO replays (id, run_id, replay_json) VALUES (?, ?, ?)",
-    )
-    .bind(&id)
-    .bind(run_id)
-    .bind(&json)
-    .execute(pool)
-    .await?;
+    sqlx::query("INSERT OR REPLACE INTO replays (id, run_id, replay_json) VALUES (?, ?, ?)")
+        .bind(&id)
+        .bind(run_id)
+        .bind(&json)
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
@@ -150,12 +141,10 @@ pub async fn get_replay(
     pool: &SqlitePool,
     run_id: &str,
 ) -> Result<Option<crate::replay::Replay>, sqlx::Error> {
-    let row: Option<(String,)> = sqlx::query_as(
-        "SELECT replay_json FROM replays WHERE run_id = ?",
-    )
-    .bind(run_id)
-    .fetch_optional(pool)
-    .await?;
+    let row: Option<(String,)> = sqlx::query_as("SELECT replay_json FROM replays WHERE run_id = ?")
+        .bind(run_id)
+        .fetch_optional(pool)
+        .await?;
 
     Ok(row.and_then(|(j,)| replay::from_json(&j).ok()))
 }
@@ -176,4 +165,3 @@ pub async fn run_solve_and_save(
 
     Ok(run_id)
 }
-
