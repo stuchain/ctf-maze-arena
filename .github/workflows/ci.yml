@@ -40,3 +40,15 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
       - run: npx tsc --noEmit
+
+  bench:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Compile benchmarks
+        run: cargo bench --no-run
