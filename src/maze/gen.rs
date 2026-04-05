@@ -157,7 +157,7 @@ mod tests {
     fn kruskal_connectivity() {
         let maze = generate_kruskal(10, 10, 12345);
         assert!(is_fully_connected(&maze), "all cells reachable from start");
-        assert!(maze.neighbors(maze.start).len() >= 1);
+        assert!(!maze.neighbors(maze.start).is_empty());
     }
 
     #[test]
@@ -193,7 +193,7 @@ mod tests {
     fn prim_connectivity() {
         let maze = generate_prim(10, 10, 12345);
         assert!(is_fully_connected(&maze), "all cells reachable from start");
-        assert!(maze.neighbors(maze.start).len() >= 1);
+        assert!(!maze.neighbors(maze.start).is_empty());
     }
 
     #[test]

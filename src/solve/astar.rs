@@ -57,7 +57,7 @@ impl Solver for AstarSolver {
             }
             for next in maze.neighbors(cell) {
                 let g_next = g_cur + 1;
-                if g.get(&next).map_or(true, |&old| g_next < old) {
+                if g.get(&next).is_none_or(|&old| g_next < old) {
                     g.insert(next, g_next);
                     parent.insert(next, cell);
                     heap.push(Item {
