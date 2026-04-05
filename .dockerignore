@@ -1,0 +1,8 @@
+target/
+web/node_modules
+.git
+data/
+**/.env
+.env
+web/.env.local
+*.md
