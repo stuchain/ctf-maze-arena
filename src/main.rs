@@ -1,5 +1,6 @@
 use ctf_maze_arena::api;
 use ctf_maze_arena::solve;
+use axum::http::{header, HeaderName, HeaderValue};
 use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::HashMap;
 use std::fs;
@@ -7,6 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::set_header::SetResponseHeaderLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -34,7 +36,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
         .allow_headers([axum::http::header::CONTENT_TYPE]);
 
-    let app = api::router(state).layer(cors);
+    let app = api::router(state)
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            HeaderName::from_static("x-frame-options"),
+            HeaderValue::from_static("DENY"),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::REFERRER_POLICY,
+            HeaderValue::from_static("strict-origin-when-cross-origin"),
+        ))
+        .layer(cors);
     let port: u16 = std::env::var("PORT")
         .ok()
         .and_then(|p| p.parse().ok())
