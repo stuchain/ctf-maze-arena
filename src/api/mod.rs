@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 
 use crate::maze::gen::{generate, GeneratorAlgo};
 use crate::solve::SolveStats;
@@ -21,20 +22,41 @@ pub struct AppState {
     pub stream_broadcasts: Arc<RwLock<HashMap<String, broadcast::Sender<String>>>>,
 }
 
-pub fn router(state: Arc<AppState>) -> Router {
-    Router::new().nest("/api", api_routes().layer(Extension(state)))
+pub fn router(
+    state: Arc<AppState>,
+    global_rate_limit_per_second: u64,
+    global_rate_limit_burst: u32,
+) -> Router {
+    Router::new().nest(
+        "/api",
+        api_routes(global_rate_limit_per_second, global_rate_limit_burst).layer(Extension(state)),
+    )
 }
 
-fn api_routes() -> Router {
-    Router::new()
+fn api_routes(global_rate_limit_per_second: u64, global_rate_limit_burst: u32) -> Router {
+    let global_limiter = GovernorConfigBuilder::default()
+        .per_second(global_rate_limit_per_second)
+        .burst_size(global_rate_limit_burst)
+        .use_headers()
+        .finish()
+        .expect("valid global rate limit config");
+
+    let exempt_routes = Router::new()
         .route("/health", get(health_handler))
+        .route("/solve/stream", get(stream_handler));
+
+    let limited_routes = Router::new()
         .route("/maze/generate", post(generate_handler))
         .route("/maze/:maze_id", get(get_maze_handler))
         .route("/solve", post(solve_handler))
-        .route("/solve/stream", get(stream_handler))
         .route("/replay/:run_id", get(replay_handler))
         .route("/leaderboard", get(leaderboard_handler))
         .route("/daily", get(daily_handler))
+        .layer(GovernorLayer {
+            config: Arc::new(global_limiter),
+        });
+
+    Router::new().merge(exempt_routes).merge(limited_routes)
 }
 
 async fn health_handler() -> &'static str {
@@ -333,7 +355,7 @@ async fn handle_socket(
     use broadcast::error::RecvError;
 
     let hello = json!({"type": "connected", "runId": run_id}).to_string();
-    if socket.send(Message::Text(hello)).await.is_err() {
+    if socket.send(Message::Text(hello.into())).await.is_err() {
         return;
     }
 
@@ -344,7 +366,7 @@ async fn handle_socket(
             None => {
                 let err =
                     json!({"type": "error", "error": "unknown or completed runId"}).to_string();
-                let _ = socket.send(Message::Text(err)).await;
+                let _ = socket.send(Message::Text(err.into())).await;
                 return;
             }
         }
@@ -354,7 +376,7 @@ async fn handle_socket(
         match rx.recv().await {
             Ok(text) => {
                 // Client disconnected: stop forwarding; solver task may still finish and persist replay.
-                if socket.send(Message::Text(text)).await.is_err() {
+                if socket.send(Message::Text(text.into())).await.is_err() {
                     break;
                 }
             }
