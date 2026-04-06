@@ -21,11 +21,15 @@ enum AllowedOriginsSetting {
 struct RateLimitConfig {
     per_second: u64,
     burst: u32,
+    expensive_per_second: u64,
+    expensive_burst: u32,
 }
 
 impl RateLimitConfig {
     const DEFAULT_PER_SECOND: u64 = 20;
     const DEFAULT_BURST: u32 = 40;
+    const DEFAULT_EXPENSIVE_PER_SECOND: u64 = 5;
+    const DEFAULT_EXPENSIVE_BURST: u32 = 10;
 
     fn from_env() -> Self {
         let per_second = parse_u64_env(
@@ -33,8 +37,21 @@ impl RateLimitConfig {
             RateLimitConfig::DEFAULT_PER_SECOND,
         );
         let burst = parse_u32_env("RATE_LIMIT_BURST", RateLimitConfig::DEFAULT_BURST);
+        let expensive_per_second = parse_u64_env(
+            "RATE_LIMIT_EXPENSIVE_PER_SECOND",
+            RateLimitConfig::DEFAULT_EXPENSIVE_PER_SECOND,
+        );
+        let expensive_burst = parse_u32_env(
+            "RATE_LIMIT_EXPENSIVE_BURST",
+            RateLimitConfig::DEFAULT_EXPENSIVE_BURST,
+        );
 
-        Self { per_second, burst }
+        Self {
+            per_second,
+            burst,
+            expensive_per_second,
+            expensive_burst,
+        }
     }
 }
 
@@ -62,12 +79,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing::info!(
         rate_limit_per_second = rate_limit.per_second,
         rate_limit_burst = rate_limit.burst,
+        rate_limit_expensive_per_second = rate_limit.expensive_per_second,
+        rate_limit_expensive_burst = rate_limit.expensive_burst,
         "loaded rate limit config"
     );
 
     let cors = cors_layer_from_env();
 
-    let app = api::router(state, rate_limit.per_second, rate_limit.burst)
+    let app = api::router(
+        state,
+        rate_limit.per_second,
+        rate_limit.burst,
+        rate_limit.expensive_per_second,
+        rate_limit.expensive_burst,
+    )
         .layer(SetResponseHeaderLayer::if_not_present(
             header::X_CONTENT_TYPE_OPTIONS,
             HeaderValue::from_static("nosniff"),
@@ -330,12 +355,18 @@ mod tests {
     fn rate_limit_config_from_env_reads_values() {
         std::env::set_var("RATE_LIMIT_PER_SECOND", "18");
         std::env::set_var("RATE_LIMIT_BURST", "36");
+        std::env::set_var("RATE_LIMIT_EXPENSIVE_PER_SECOND", "4");
+        std::env::set_var("RATE_LIMIT_EXPENSIVE_BURST", "8");
 
         let config = RateLimitConfig::from_env();
         assert_eq!(config.per_second, 18);
         assert_eq!(config.burst, 36);
+        assert_eq!(config.expensive_per_second, 4);
+        assert_eq!(config.expensive_burst, 8);
 
         std::env::remove_var("RATE_LIMIT_PER_SECOND");
         std::env::remove_var("RATE_LIMIT_BURST");
+        std::env::remove_var("RATE_LIMIT_EXPENSIVE_PER_SECOND");
+        std::env::remove_var("RATE_LIMIT_EXPENSIVE_BURST");
     }
 }
