@@ -72,8 +72,22 @@ fn cors_layer_from_env() -> CorsLayer {
     let allowed_origins_raw = std::env::var("ALLOWED_ORIGINS").ok();
     match parse_allowed_origins_env(allowed_origins_raw.as_deref()) {
         AllowedOriginsSetting::Unset => {
-            tracing::info!("ALLOWED_ORIGINS is unset; using permissive CORS for local/dev.");
-            base.allow_origin(Any)
+            if cfg!(debug_assertions) {
+                tracing::info!("ALLOWED_ORIGINS is unset; using permissive CORS for local/dev.");
+                return base.allow_origin(Any);
+            }
+
+            if is_permissive_override_enabled() {
+                tracing::warn!(
+                    "ALLOWED_ORIGINS is unset in release build and CORS_PERMISSIVE=true; allowing permissive CORS by explicit override."
+                );
+                return base.allow_origin(Any);
+            }
+
+            tracing::warn!(
+                "ALLOWED_ORIGINS is unset in release build; permissive CORS is disabled by default."
+            );
+            base
         }
         AllowedOriginsSetting::Explicit(origins) if origins.is_empty() => {
             tracing::info!(
@@ -100,6 +114,17 @@ fn cors_layer_from_env() -> CorsLayer {
             base.allow_origin(header_values)
         }
     }
+}
+
+fn is_permissive_override_enabled() -> bool {
+    parse_bool_env(std::env::var("CORS_PERMISSIVE").ok().as_deref())
+}
+
+fn parse_bool_env(value: Option<&str>) -> bool {
+    value
+        .map(str::trim)
+        .map(|v| v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
 }
 
 fn parse_allowed_origins_env(value: Option<&str>) -> AllowedOriginsSetting {
@@ -152,7 +177,9 @@ async fn init_db() -> Result<sqlx::SqlitePool, sqlx::Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_allowed_origins, parse_allowed_origins_env, AllowedOriginsSetting};
+    use super::{
+        parse_allowed_origins, parse_allowed_origins_env, parse_bool_env, AllowedOriginsSetting,
+    };
 
     #[test]
     fn parse_allowed_origins_splits_and_trims() {
@@ -185,5 +212,14 @@ mod tests {
             parse_allowed_origins_env(Some("")),
             AllowedOriginsSetting::Explicit(Vec::new())
         );
+    }
+
+    #[test]
+    fn parse_bool_env_accepts_true_case_insensitively() {
+        assert!(parse_bool_env(Some("true")));
+        assert!(parse_bool_env(Some("TRUE")));
+        assert!(parse_bool_env(Some(" True ")));
+        assert!(!parse_bool_env(Some("false")));
+        assert!(!parse_bool_env(None));
     }
 }
