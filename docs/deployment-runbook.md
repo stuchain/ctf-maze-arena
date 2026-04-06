@@ -17,6 +17,11 @@ This project ships a Rust API in a container ([`Dockerfile`](../Dockerfile)) wit
 | `RUST_LOG` | Application log verbosity. | `RUST_LOG=info` | Recommended |
 | `ALLOWED_ORIGINS` | Comma-separated browser origin allowlist for CORS. Trailing slashes are normalized. | `ALLOWED_ORIGINS=https://app.example.com,https://www.example.com` | Yes (go-live requirement) |
 | `CORS_PERMISSIVE` | Escape hatch to allow permissive CORS in release when explicitly set to `true`. | `CORS_PERMISSIVE=true` | No (use only for controlled staging) |
+| `RATE_LIMIT_PER_SECOND` | Baseline per-IP refill rate for limited API routes. | `RATE_LIMIT_PER_SECOND=20` | Recommended |
+| `RATE_LIMIT_BURST` | Baseline per-IP burst size. | `RATE_LIMIT_BURST=40` | Recommended |
+| `RATE_LIMIT_EXPENSIVE_PER_SECOND` | Stricter per-IP refill rate for expensive routes (`POST /api/solve`, `POST /api/maze/generate`). | `RATE_LIMIT_EXPENSIVE_PER_SECOND=5` | Recommended |
+| `RATE_LIMIT_EXPENSIVE_BURST` | Stricter per-IP burst size for expensive routes. | `RATE_LIMIT_EXPENSIVE_BURST=10` | Recommended |
+| `TRUST_PROXY` | Toggle proxy-aware IP extraction for rate limiting (`SmartIpKeyExtractor` when `true`). | `TRUST_PROXY=false` | No (enable only behind trusted proxy) |
 
 Platforms often set `PORT` for you. **If the app fails to bind**, confirm you are not hardcoding `8080` in the platform UI while the process expects another port.
 
@@ -33,6 +38,14 @@ Do not commit `.env` files with real credentials or tokens. Keep secrets in your
 - If `ALLOWED_ORIGINS` is unset, the app falls back to permissive behavior for local development convenience.
 - If `ALLOWED_ORIGINS` is set but empty/invalid, cross-origin CORS is disabled.
 - Before go-live, set `ALLOWED_ORIGINS` explicitly to your production web origins.
+
+## Client IP and proxy trust (rate limiting)
+
+- Default mode (`TRUST_PROXY=false`) keys rate limits by direct peer socket IP. This is safest and avoids header spoofing risk.
+- Proxy mode (`TRUST_PROXY=true`) uses forwarded headers (`x-forwarded-for`, `x-real-ip`, `forwarded`) to infer client IP.
+- Enable `TRUST_PROXY=true` only when your platform/load balancer overwrites or strips inbound forwarding headers from clients.
+- If this is misconfigured, attackers can spoof forwarding headers and evade per-IP limits.
+- For Render/Fly/Cloudflare-style deployments, confirm trusted proxy behavior in platform docs before enabling proxy mode.
 
 ## Render (Docker)
 
@@ -55,3 +68,5 @@ Do not commit `.env` files with real credentials or tokens. Keep secrets in your
 ## Local parity
 
 - See [`docker-compose.yml`](../docker-compose.yml) and [`.env.example`](../.env.example) for a local stack with a bind-mounted `./data` directory.
+- Use [`scripts/verify-phase12-14.ps1`](../scripts/verify-phase12-14.ps1) for reproducible phase 12-14 checks.
+- Checklist/evidence mapping is tracked in [`phase-12-14-verification.md`](./phase-12-14-verification.md).

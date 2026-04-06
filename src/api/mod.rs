@@ -9,7 +9,11 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
-use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
+use tower_governor::{
+    governor::GovernorConfigBuilder,
+    key_extractor::{PeerIpKeyExtractor, SmartIpKeyExtractor},
+    GovernorLayer,
+};
 
 use crate::maze::gen::{generate, GeneratorAlgo};
 use crate::solve::SolveStats;
@@ -28,6 +32,7 @@ pub fn router(
     global_rate_limit_burst: u32,
     expensive_rate_limit_per_second: u64,
     expensive_rate_limit_burst: u32,
+    trust_proxy: bool,
 ) -> Router {
     Router::new().nest(
         "/api",
@@ -36,6 +41,7 @@ pub fn router(
             global_rate_limit_burst,
             expensive_rate_limit_per_second,
             expensive_rate_limit_burst,
+            trust_proxy,
         )
         .layer(Extension(state)),
     )
@@ -46,45 +52,89 @@ fn api_routes(
     global_rate_limit_burst: u32,
     expensive_rate_limit_per_second: u64,
     expensive_rate_limit_burst: u32,
+    trust_proxy: bool,
 ) -> Router {
-    let global_limiter = GovernorConfigBuilder::default()
-        .per_second(global_rate_limit_per_second)
-        .burst_size(global_rate_limit_burst)
-        .use_headers()
-        .finish()
-        .expect("valid global rate limit config");
-
-    let expensive_limiter = GovernorConfigBuilder::default()
-        .per_second(expensive_rate_limit_per_second)
-        .burst_size(expensive_rate_limit_burst)
-        .use_headers()
-        .finish()
-        .expect("valid expensive route rate limit config");
-
     let exempt_routes = Router::new()
         .route("/health", get(health_handler))
         .route("/solve/stream", get(stream_handler));
+    if trust_proxy {
+        tracing::warn!(
+            "TRUST_PROXY=true: rate limiting keying uses SmartIpKeyExtractor; only enable behind trusted proxies that overwrite inbound forwarding headers."
+        );
+        let global_limiter = GovernorConfigBuilder::default()
+            .key_extractor(SmartIpKeyExtractor)
+            .per_second(global_rate_limit_per_second)
+            .burst_size(global_rate_limit_burst)
+            .use_headers()
+            .finish()
+            .expect("valid global rate limit config");
 
-    let expensive_routes = Router::new()
-        .route("/maze/generate", post(generate_handler))
-        .route("/solve", post(solve_handler))
-        .layer(GovernorLayer {
-            config: Arc::new(expensive_limiter),
-        });
+        let expensive_limiter = GovernorConfigBuilder::default()
+            .key_extractor(SmartIpKeyExtractor)
+            .per_second(expensive_rate_limit_per_second)
+            .burst_size(expensive_rate_limit_burst)
+            .use_headers()
+            .finish()
+            .expect("valid expensive route rate limit config");
 
-    let baseline_routes = Router::new()
-        .route("/maze/:maze_id", get(get_maze_handler))
-        .route("/replay/:run_id", get(replay_handler))
-        .route("/leaderboard", get(leaderboard_handler))
-        .route("/daily", get(daily_handler))
-        .layer(GovernorLayer {
-            config: Arc::new(global_limiter),
-        });
+        let expensive_routes = Router::new()
+            .route("/maze/generate", post(generate_handler))
+            .route("/solve", post(solve_handler))
+            .layer(GovernorLayer {
+                config: Arc::new(expensive_limiter),
+            });
 
-    Router::new()
-        .merge(exempt_routes)
-        .merge(expensive_routes)
-        .merge(baseline_routes)
+        let baseline_routes = Router::new()
+            .route("/maze/{maze_id}", get(get_maze_handler))
+            .route("/replay/{run_id}", get(replay_handler))
+            .route("/leaderboard", get(leaderboard_handler))
+            .route("/daily", get(daily_handler))
+            .layer(GovernorLayer {
+                config: Arc::new(global_limiter),
+            });
+
+        Router::new()
+            .merge(exempt_routes)
+            .merge(expensive_routes)
+            .merge(baseline_routes)
+    } else {
+        let global_limiter = GovernorConfigBuilder::default()
+            .key_extractor(PeerIpKeyExtractor)
+            .per_second(global_rate_limit_per_second)
+            .burst_size(global_rate_limit_burst)
+            .use_headers()
+            .finish()
+            .expect("valid global rate limit config");
+
+        let expensive_limiter = GovernorConfigBuilder::default()
+            .key_extractor(PeerIpKeyExtractor)
+            .per_second(expensive_rate_limit_per_second)
+            .burst_size(expensive_rate_limit_burst)
+            .use_headers()
+            .finish()
+            .expect("valid expensive route rate limit config");
+
+        let expensive_routes = Router::new()
+            .route("/maze/generate", post(generate_handler))
+            .route("/solve", post(solve_handler))
+            .layer(GovernorLayer {
+                config: Arc::new(expensive_limiter),
+            });
+
+        let baseline_routes = Router::new()
+            .route("/maze/{maze_id}", get(get_maze_handler))
+            .route("/replay/{run_id}", get(replay_handler))
+            .route("/leaderboard", get(leaderboard_handler))
+            .route("/daily", get(daily_handler))
+            .layer(GovernorLayer {
+                config: Arc::new(global_limiter),
+            });
+
+        Router::new()
+            .merge(exempt_routes)
+            .merge(expensive_routes)
+            .merge(baseline_routes)
+    }
 }
 
 async fn health_handler() -> &'static str {

@@ -1,11 +1,12 @@
 # syntax=docker/dockerfile:1
 
-FROM rust:1.85-bookworm AS builder
+FROM rust:1.86-bookworm AS builder
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY migrations ./migrations
-RUN cargo build --release
+COPY benches ./benches
+RUN cargo build --release --locked
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
