@@ -17,6 +17,27 @@ enum AllowedOriginsSetting {
     Explicit(Vec<String>),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RateLimitConfig {
+    per_second: u64,
+    burst: u32,
+}
+
+impl RateLimitConfig {
+    const DEFAULT_PER_SECOND: u64 = 20;
+    const DEFAULT_BURST: u32 = 40;
+
+    fn from_env() -> Self {
+        let per_second = parse_u64_env(
+            "RATE_LIMIT_PER_SECOND",
+            RateLimitConfig::DEFAULT_PER_SECOND,
+        );
+        let burst = parse_u32_env("RATE_LIMIT_BURST", RateLimitConfig::DEFAULT_BURST);
+
+        Self { per_second, burst }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenvy::dotenv().ok();
@@ -36,6 +57,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         solvers: solve::default_registry(),
         stream_broadcasts: Arc::new(RwLock::new(HashMap::new())),
     });
+
+    let rate_limit = RateLimitConfig::from_env();
+    tracing::info!(
+        rate_limit_per_second = rate_limit.per_second,
+        rate_limit_burst = rate_limit.burst,
+        "loaded rate limit config"
+    );
 
     let cors = cors_layer_from_env();
 
@@ -127,6 +155,42 @@ fn parse_bool_env(value: Option<&str>) -> bool {
         .unwrap_or(false)
 }
 
+fn parse_u64_env(key: &str, default: u64) -> u64 {
+    match std::env::var(key) {
+        Ok(v) => match v.trim().parse::<u64>() {
+            Ok(parsed) if parsed > 0 => parsed,
+            _ => {
+                tracing::warn!(
+                    "{} is invalid (must be a positive integer): {:?}; using default {}",
+                    key,
+                    v,
+                    default
+                );
+                default
+            }
+        },
+        Err(_) => default,
+    }
+}
+
+fn parse_u32_env(key: &str, default: u32) -> u32 {
+    match std::env::var(key) {
+        Ok(v) => match v.trim().parse::<u32>() {
+            Ok(parsed) if parsed > 0 => parsed,
+            _ => {
+                tracing::warn!(
+                    "{} is invalid (must be a positive integer): {:?}; using default {}",
+                    key,
+                    v,
+                    default
+                );
+                default
+            }
+        },
+        Err(_) => default,
+    }
+}
+
 fn parse_allowed_origins_env(value: Option<&str>) -> AllowedOriginsSetting {
     match value {
         None => AllowedOriginsSetting::Unset,
@@ -178,7 +242,8 @@ async fn init_db() -> Result<sqlx::SqlitePool, sqlx::Error> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_allowed_origins, parse_allowed_origins_env, parse_bool_env, AllowedOriginsSetting,
+        parse_allowed_origins, parse_allowed_origins_env, parse_bool_env, parse_u32_env,
+        parse_u64_env, AllowedOriginsSetting, RateLimitConfig,
     };
 
     #[test]
@@ -221,5 +286,52 @@ mod tests {
         assert!(parse_bool_env(Some(" True ")));
         assert!(!parse_bool_env(Some("false")));
         assert!(!parse_bool_env(None));
+    }
+
+    #[test]
+    fn parse_u64_env_uses_default_for_missing_or_invalid_values() {
+        let key = "TEST_RATE_LIMIT_PER_SECOND";
+        std::env::remove_var(key);
+        assert_eq!(parse_u64_env(key, 20), 20);
+
+        std::env::set_var(key, "abc");
+        assert_eq!(parse_u64_env(key, 20), 20);
+
+        std::env::set_var(key, "0");
+        assert_eq!(parse_u64_env(key, 20), 20);
+
+        std::env::set_var(key, "25");
+        assert_eq!(parse_u64_env(key, 20), 25);
+        std::env::remove_var(key);
+    }
+
+    #[test]
+    fn parse_u32_env_uses_default_for_missing_or_invalid_values() {
+        let key = "TEST_RATE_LIMIT_BURST";
+        std::env::remove_var(key);
+        assert_eq!(parse_u32_env(key, 40), 40);
+
+        std::env::set_var(key, "-1");
+        assert_eq!(parse_u32_env(key, 40), 40);
+
+        std::env::set_var(key, "0");
+        assert_eq!(parse_u32_env(key, 40), 40);
+
+        std::env::set_var(key, "80");
+        assert_eq!(parse_u32_env(key, 40), 80);
+        std::env::remove_var(key);
+    }
+
+    #[test]
+    fn rate_limit_config_from_env_reads_values() {
+        std::env::set_var("RATE_LIMIT_PER_SECOND", "18");
+        std::env::set_var("RATE_LIMIT_BURST", "36");
+
+        let config = RateLimitConfig::from_env();
+        assert_eq!(config.per_second, 18);
+        assert_eq!(config.burst, 36);
+
+        std::env::remove_var("RATE_LIMIT_PER_SECOND");
+        std::env::remove_var("RATE_LIMIT_BURST");
     }
 }
