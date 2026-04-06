@@ -10,13 +10,17 @@ This project ships a Rust API in a container ([`Dockerfile`](../Dockerfile)) wit
 
 ## Environment variables
 
-| Variable | Purpose |
-|----------|---------|
-| `PORT` | HTTP listen port inside the container (the app reads `PORT`; default `8080`). |
-| `DATABASE_URL` | e.g. `sqlite:./data/ctf_maze.db` — path must be **on a persistent volume** in production. |
-| `RUST_LOG` | Logging level (e.g. `info`). |
+| Variable | Purpose | Example | Required in prod? |
+|----------|---------|---------|-------------------|
+| `PORT` | HTTP listen port inside the container (the app reads `PORT`; default `8080`). | `PORT=10000` | Usually platform-provided |
+| `DATABASE_URL` | SQLite path; must be on persistent storage in production. | `DATABASE_URL=sqlite:./data/ctf_maze.db` | Yes |
+| `RUST_LOG` | Application log verbosity. | `RUST_LOG=info` | Recommended |
+| `ALLOWED_ORIGINS` | Comma-separated browser origin allowlist for CORS. Trailing slashes are normalized. | `ALLOWED_ORIGINS=https://app.example.com,https://www.example.com` | Yes (go-live requirement) |
+| `CORS_PERMISSIVE` | Escape hatch to allow permissive CORS in release when explicitly set to `true`. | `CORS_PERMISSIVE=true` | No (use only for controlled staging) |
 
 Platforms often set `PORT` for you. **If the app fails to bind**, confirm you are not hardcoding `8080` in the platform UI while the process expects another port.
+
+Do not commit `.env` files with real credentials or tokens. Keep secrets in your platform's secret manager (Render/Fly/etc.).
 
 ## TLS
 
@@ -25,8 +29,10 @@ Platforms often set `PORT` for you. **If the app fails to bind**, confirm you ar
 
 ## CORS and browser origins
 
-- Today the API uses a **permissive** CORS configuration in `src/main.rs`.
-- For production hardening, **phase 13** is expected to restrict origins (e.g. `ALLOWED_ORIGINS`). Until then, document which front-end origin will call the API and plan to align CORS with that origin.
+- `ALLOWED_ORIGINS` controls which browser origins may call the API cross-origin.
+- If `ALLOWED_ORIGINS` is unset, the app falls back to permissive behavior for local development convenience.
+- If `ALLOWED_ORIGINS` is set but empty/invalid, cross-origin CORS is disabled.
+- Before go-live, set `ALLOWED_ORIGINS` explicitly to your production web origins.
 
 ## Render (Docker)
 
