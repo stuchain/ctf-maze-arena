@@ -8,10 +8,12 @@ import { GenerateForm, type GenerateFormParams } from '../components/GenerateFor
 import { SolverPicker } from '../components/SolverPicker';
 import { useSolveStream } from '../hooks/useSolveStream';
 import { backendMazeToMazeData } from '@/lib/maze';
+import { signIn, signOut, useSession } from 'next-auth/react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 export default function Home() {
+  const { data: session, status: authStatus } = useSession();
   const [solver, setSolver] = useState('ASTAR');
 
   const [maze, setMaze] = useState<MazeData | null>(null);
@@ -112,6 +114,33 @@ export default function Home() {
       className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black"
     >
       <div className="flex flex-col items-center gap-6 p-8">
+        <div className="flex items-center gap-3 text-sm">
+          {authStatus === 'authenticated' ? (
+            <>
+              <span>
+                Signed in as {session?.user?.name ?? session?.user?.email ?? 'GitHub user'}
+              </span>
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="rounded border px-3 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1"
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <span>Sign in to submit authenticated leaderboard scores.</span>
+              <button
+                type="button"
+                onClick={() => void signIn('github')}
+                className="rounded border px-3 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1"
+              >
+                Sign in with GitHub
+              </button>
+            </>
+          )}
+        </div>
         <label htmlFor="solver-picker" className="text-sm text-zinc-700 dark:text-zinc-300">
           Solver
         </label>
