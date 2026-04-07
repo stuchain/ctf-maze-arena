@@ -22,6 +22,17 @@ Interactive maze playground: generate seeded mazes (Kruskal, Prim, DFS), run sol
 - [docs/observability-runbook.md](docs/observability-runbook.md) — request tracing, log triage, and 429 handling
 - [docs/e2e-runbook.md](docs/e2e-runbook.md) — local Playwright setup, workflows, and trace debugging
 
+## Authentication quick setup
+
+- Create a GitHub OAuth app with callback URL `http://localhost:3000/api/auth/callback/github` (and your production callback URL for deployed environments).
+- Set web auth variables in `web/.env.local`: `GITHUB_ID`, `GITHUB_SECRET`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`.
+- Set shared API JWT signing secret in backend env: `JWT_SECRET`.
+- Choose rollout mode with `AUTH_MODE`:
+  - `anonymous` (default): no auth required.
+  - `optional_jwt`: parse JWT when present, but don't require it.
+  - `jwt`: require Bearer JWT on protected routes (`POST /api/solve`, `POST /api/leaderboard`).
+- Rollback safety: set `AUTH_MODE=anonymous` and restart services.
+
 ## Quick start
 
 1. Copy [`.env.example`](.env.example) to `.env` in the repo root and adjust if needed (`DATABASE_URL`, `PORT`, `RUST_LOG`). For the frontend, use `web/.env.local` with `NEXT_PUBLIC_API_URL` (default `http://localhost:8080`).

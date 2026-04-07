@@ -4,6 +4,16 @@ Base URL: `http://localhost:8080` (or set `NEXT_PUBLIC_API_URL` in the Next.js a
 
 All REST routes below are under `/api`.
 
+## Authentication model
+
+- The web app signs users in with GitHub via NextAuth.
+- `GET /api/token` (web route) mints short-lived API JWTs (10 minute TTL) from the authenticated web session.
+- API JWT middleware validates `HS256` signature, `exp`, and `iat` with `JWT_CLOCK_SKEW_SECS` tolerance.
+- `AUTH_MODE` controls enforcement:
+  - `anonymous`: no JWT required.
+  - `optional_jwt`: JWT accepted when present.
+  - `jwt`: JWT required on protected routes (`POST /api/solve`, `POST /api/leaderboard`).
+
 ## GET /api/health
 
 Returns build-aware JSON:

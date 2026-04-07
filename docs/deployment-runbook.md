@@ -23,6 +23,9 @@ This project ships a Rust API in a container ([`Dockerfile`](../Dockerfile)) wit
 | `RATE_LIMIT_EXPENSIVE_PER_SECOND` | Stricter per-IP refill rate for expensive routes (`POST /api/solve`, `POST /api/maze/generate`). | `RATE_LIMIT_EXPENSIVE_PER_SECOND=5` | Recommended |
 | `RATE_LIMIT_EXPENSIVE_BURST` | Stricter per-IP burst size for expensive routes. | `RATE_LIMIT_EXPENSIVE_BURST=10` | Recommended |
 | `TRUST_PROXY` | Toggle proxy-aware IP extraction for rate limiting (`SmartIpKeyExtractor` when `true`). | `TRUST_PROXY=false` | No (enable only behind trusted proxy) |
+| `JWT_SECRET` | Shared HMAC secret used by the web token route to mint API JWTs and by API middleware to validate them. | `JWT_SECRET=long-random-secret` | Required for `AUTH_MODE=jwt` and `optional_jwt` |
+| `JWT_CLOCK_SKEW_SECS` | Allowed clock skew for JWT `exp`/`iat` validation. | `JWT_CLOCK_SKEW_SECS=60` | Recommended |
+| `AUTH_MODE` | Auth rollout behavior (`anonymous`, `optional_jwt`, `jwt`). | `AUTH_MODE=anonymous` | Recommended |
 
 Platforms often set `PORT` for you. **If the app fails to bind**, confirm you are not hardcoding `8080` in the platform UI while the process expects another port.
 
@@ -71,6 +74,14 @@ Do not commit `.env` files with real credentials or tokens. Keep secrets in your
 ## Health check
 
 - `GET /api/health` should return JSON with `status: "ok"` plus build metadata (`version`, `gitSha`). Configure your platform health check to use that path.
+
+## OAuth and auth rollout notes
+
+- Configure GitHub OAuth callback URLs per environment:
+  - Local: `http://localhost:3000/api/auth/callback/github`
+  - Production: `https://<your-domain>/api/auth/callback/github`
+- In `AUTH_MODE=jwt`, requests to `POST /api/solve` and `POST /api/leaderboard` must include Bearer tokens minted by the web token route.
+- Roll back quickly by setting `AUTH_MODE=anonymous` and redeploying/restarting without touching schema.
 
 ## Local parity
 

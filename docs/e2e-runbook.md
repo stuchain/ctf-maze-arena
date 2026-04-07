@@ -19,6 +19,7 @@ npx playwright install
 
 - Backend API URL for web/e2e: `NEXT_PUBLIC_API_URL=http://127.0.0.1:8080`
 - Backend port: `PORT=8080` (default if unset)
+- Auth rollout mode for smoke tests: `AUTH_MODE=anonymous`
 
 For local shell session running tests:
 
@@ -91,3 +92,11 @@ npx playwright show-trace test-results/<trace-folder>/trace.zip
 
 - Generate maze and confirm grid rendering.
 - Solve maze and confirm terminal stream status reaches `finished`.
+- Signed-out token bridge behavior (`GET /api/token`) returns `401`.
+
+## Auth-specific local checks
+
+- To test strict auth routing locally, run backend with:
+  - `AUTH_MODE=jwt`
+  - `JWT_SECRET=<same secret used by web token route>`
+- Verify signed-out `POST /api/solve` returns `401`, then sign in via GitHub and re-run to confirm success with Bearer auth.
