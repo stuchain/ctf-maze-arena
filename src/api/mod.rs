@@ -265,7 +265,10 @@ fn api_routes(
         let baseline_routes = Router::new()
             .route("/maze/{maze_id}", get(get_maze_handler))
             .route("/replay/{run_id}", get(replay_handler))
-            .route("/leaderboard", get(leaderboard_handler))
+            .route(
+                "/leaderboard",
+                get(leaderboard_handler).post(leaderboard_submit_handler),
+            )
             .route("/daily", get(daily_handler))
             .layer(GovernorLayer {
                 config: Arc::new(global_limiter),
@@ -302,7 +305,10 @@ fn api_routes(
         let baseline_routes = Router::new()
             .route("/maze/{maze_id}", get(get_maze_handler))
             .route("/replay/{run_id}", get(replay_handler))
-            .route("/leaderboard", get(leaderboard_handler))
+            .route(
+                "/leaderboard",
+                get(leaderboard_handler).post(leaderboard_submit_handler),
+            )
             .route("/daily", get(daily_handler))
             .layer(GovernorLayer {
                 config: Arc::new(global_limiter),
@@ -461,6 +467,7 @@ pub struct SolveResponse {
 
 async fn solve_handler(
     Extension(state): Extension<Arc<AppState>>,
+    claims: Option<Extension<AuthClaims>>,
     Json(req): Json<SolveRequest>,
 ) -> Result<Json<SolveResponse>, (StatusCode, Json<Value>)> {
     let maze = store::get_maze(&state.db, &req.maze_id)
@@ -493,6 +500,9 @@ async fn solve_handler(
                 Json(json!({"error": e.to_string()})),
             )
         })?;
+    if let Some(Extension(claims)) = claims {
+        let _ = store::bind_run_user(&state.db, &run_id, &claims.sub).await;
+    }
 
     let db = state.db.clone();
     let maze_id = req.maze_id.clone();
@@ -526,6 +536,54 @@ async fn solve_handler(
     });
 
     Ok(Json(SolveResponse { run_id }))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeaderboardSubmitRequest {
+    pub run_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeaderboardSubmitResponse {
+    pub accepted: bool,
+}
+
+async fn leaderboard_submit_handler(
+    Extension(state): Extension<Arc<AppState>>,
+    claims: Option<Extension<AuthClaims>>,
+    Json(req): Json<LeaderboardSubmitRequest>,
+) -> Result<Json<LeaderboardSubmitResponse>, (StatusCode, Json<Value>)> {
+    if req.run_id.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, Json(json!({"error": "runId is required"}))));
+    }
+    let run = store::get_run(&state.db, &req.run_id)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "db"})),
+            )
+        })?
+        .ok_or((StatusCode::NOT_FOUND, Json(json!({"error": "run not found"}))))?;
+    if run.stats.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "run is not completed"})),
+        ));
+    }
+
+    let user_id = claims.as_ref().map(|Extension(c)| c.sub.as_str());
+    store::submit_leaderboard_run(&state.db, &req.run_id, user_id)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "db"})),
+            )
+        })?;
+    Ok(Json(LeaderboardSubmitResponse { accepted: true }))
 }
 
 async fn replay_handler(

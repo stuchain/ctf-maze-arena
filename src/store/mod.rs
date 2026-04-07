@@ -83,6 +83,19 @@ pub async fn create_run(
     Ok(id)
 }
 
+pub async fn bind_run_user(
+    pool: &SqlitePool,
+    run_id: &str,
+    user_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE runs SET user_id = ? WHERE id = ?")
+        .bind(user_id)
+        .bind(run_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn update_run_stats(
     pool: &SqlitePool,
     run_id: &str,
@@ -117,6 +130,28 @@ pub async fn get_run(pool: &SqlitePool, run_id: &str) -> Result<Option<RunMetada
         solver,
         stats,
     }))
+}
+
+pub async fn submit_leaderboard_run(
+    pool: &SqlitePool,
+    run_id: &str,
+    user_id: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    let submission_id = Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO leaderboard_submissions (id, run_id, user_id) VALUES (?, ?, ?)",
+    )
+    .bind(submission_id)
+    .bind(run_id)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+
+    if let Some(user_id) = user_id {
+        bind_run_user(pool, run_id, user_id).await?;
+    }
+
+    Ok(())
 }
 
 pub async fn save_replay(

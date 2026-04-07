@@ -144,6 +144,29 @@ Query: `mazeId` (camelCase) = maze uuid.
 
 Sorted by cost, then time, then visited (best first), capped at 50.
 
+## POST /api/leaderboard
+
+Submit a completed run to the leaderboard pipeline.
+
+In `AUTH_MODE=jwt`, this endpoint requires `Authorization: Bearer <token>`.
+In `AUTH_MODE=optional_jwt` and `AUTH_MODE=anonymous`, auth is optional.
+
+**Request**:
+
+```json
+{
+  "runId": "uuid-string"
+}
+```
+
+**Response**:
+
+```json
+{
+  "accepted": true
+}
+```
+
 ## GET /api/daily
 
 Returns the UTC daily challenge parameters (camelCase):
