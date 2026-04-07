@@ -32,9 +32,10 @@ export function GenerateForm({ onSubmit, loading }: GenerateFormProps) {
       className="flex flex-col gap-2 max-w-xs"
       data-testid="generate-form"
     >
-      <label>
+      <label htmlFor="maze-width-input">
         Width:{' '}
         <input
+          id="maze-width-input"
           type="number"
           min={5}
           max={50}
@@ -44,9 +45,10 @@ export function GenerateForm({ onSubmit, loading }: GenerateFormProps) {
         />
       </label>
 
-      <label>
+      <label htmlFor="maze-height-input">
         Height:{' '}
         <input
+          id="maze-height-input"
           type="number"
           min={5}
           max={50}
@@ -56,9 +58,10 @@ export function GenerateForm({ onSubmit, loading }: GenerateFormProps) {
         />
       </label>
 
-      <label>
+      <label htmlFor="maze-seed-input">
         Seed:{' '}
         <input
+          id="maze-seed-input"
           type="number"
           min={0}
           value={seed}
@@ -67,9 +70,10 @@ export function GenerateForm({ onSubmit, loading }: GenerateFormProps) {
         />
       </label>
 
-      <label>
+      <label htmlFor="maze-algo-select">
         Algorithm:{' '}
         <select
+          id="maze-algo-select"
           value={algo}
           onChange={(e) => setAlgo(e.target.value)}
           className="border ml-2"

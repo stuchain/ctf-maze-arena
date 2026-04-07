@@ -10,11 +10,13 @@ const SOLVERS = [
 export interface SolverPickerProps {
   value: string;
   onChange: (solver: string) => void;
+  id?: string;
 }
 
-export function SolverPicker({ value, onChange }: SolverPickerProps) {
+export function SolverPicker({ value, onChange, id = 'solver-picker' }: SolverPickerProps) {
   return (
     <select
+      id={id}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="border rounded px-3 py-2"

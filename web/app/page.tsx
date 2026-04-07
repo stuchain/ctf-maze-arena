@@ -112,7 +112,10 @@ export default function Home() {
       className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black"
     >
       <div className="flex flex-col items-center gap-6 p-8">
-        <SolverPicker value={solver} onChange={setSolver} />
+        <label htmlFor="solver-picker" className="text-sm text-zinc-700 dark:text-zinc-300">
+          Solver
+        </label>
+        <SolverPicker value={solver} onChange={setSolver} id="solver-picker" />
         <button
           type="button"
           onClick={() => void handleDaily()}
