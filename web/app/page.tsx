@@ -194,7 +194,12 @@ export default function Home() {
         </div>
 
         {runId ? (
-          <div className="text-sm text-zinc-600" data-testid="stream-status">
+          <div
+            className="text-sm text-zinc-600"
+            data-testid="stream-status"
+            role={solveStreamError ? 'alert' : 'status'}
+            aria-live={solveStreamError ? 'assertive' : 'polite'}
+          >
             stream: {solveStreamStatus}
             {solveStreamError ? (
               <span className="text-red-600"> — {solveStreamError}</span>
