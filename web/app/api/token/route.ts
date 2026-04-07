@@ -6,7 +6,13 @@ import jwt from "jsonwebtoken";
 const TOKEN_TTL_SECS = 10 * 60;
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
+  let session = null;
+  try {
+    session = await getServerSession(authOptions);
+  } catch {
+    // If auth config is missing in environments like CI, treat as signed-out.
+    session = null;
+  }
   if (!session?.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
