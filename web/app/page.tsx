@@ -166,6 +166,7 @@ export default function Home() {
           }}
           disabled={!mazeId || solveLoading}
           className="bg-green-500 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          data-testid="solve-button"
         >
           {solveLoading ? 'Solving...' : 'Solve'}
         </button>
@@ -187,7 +188,7 @@ export default function Home() {
         </div>
 
         {runId ? (
-          <div className="text-sm text-zinc-600">
+          <div className="text-sm text-zinc-600" data-testid="stream-status">
             stream: {solveStreamStatus}
             {solveStreamError ? (
               <span className="text-red-600"> — {solveStreamError}</span>

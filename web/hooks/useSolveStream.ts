@@ -27,6 +27,8 @@ export interface UseSolveStreamResult {
   error: string | null;
 }
 
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
 function normalizeCell(c: unknown): [number, number] {
   if (Array.isArray(c) && c.length >= 2) {
     return [Number(c[0]), Number(c[1])];
@@ -83,6 +85,43 @@ export function useSolveStream(
     setError(null);
 
     const ws = new WebSocket(wsUrl);
+    const finalizeFromReplay = async () => {
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        try {
+          const replayRes = await fetch(`${API}/api/replay/${encodeURIComponent(runId)}`);
+          if (!replayRes.ok) {
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            continue;
+          }
+          const replay = (await replayRes.json()) as {
+            path?: unknown;
+            stats?: Record<string, unknown>;
+          };
+          const replayPathRaw = Array.isArray(replay.path) ? replay.path : [];
+          setPath(replayPathRaw.map((c) => normalizeCell(c)));
+          const replayStats = replay.stats;
+          if (replayStats) {
+            const visited = Number(replayStats.visited ?? 0);
+            const cost = Number(replayStats.cost ?? 0);
+            const ms = Number(replayStats.ms ?? 0);
+            setStats({ visited, cost, ms });
+            checkAndAward({
+              visited,
+              cost,
+              solver: solver ?? '',
+            });
+          } else {
+            setStats(null);
+          }
+          setStatus('finished');
+          terminalRef.current = true;
+          return true;
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
+      return false;
+    };
 
     ws.onopen = () => setStatus('active');
     ws.onerror = () => {
@@ -136,9 +175,19 @@ export function useSolveStream(
               : typeof msg.error === 'string'
                 ? msg.error
                 : 'Unknown error';
-          setError(errText);
-          setStatus('error');
-          terminalRef.current = true;
+          if (errText.includes('unknown or completed runId')) {
+            void finalizeFromReplay().then((ok) => {
+              if (!ok) {
+                setError(errText);
+                setStatus('error');
+                terminalRef.current = true;
+              }
+            });
+          } else {
+            setError(errText);
+            setStatus('error');
+            terminalRef.current = true;
+          }
         }
       } catch {
         setError('Invalid message');
