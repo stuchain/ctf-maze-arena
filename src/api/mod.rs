@@ -556,7 +556,10 @@ async fn leaderboard_submit_handler(
     Json(req): Json<LeaderboardSubmitRequest>,
 ) -> Result<Json<LeaderboardSubmitResponse>, (StatusCode, Json<Value>)> {
     if req.run_id.trim().is_empty() {
-        return Err((StatusCode::BAD_REQUEST, Json(json!({"error": "runId is required"}))));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "runId is required"})),
+        ));
     }
     let run = store::get_run(&state.db, &req.run_id)
         .await
@@ -566,7 +569,10 @@ async fn leaderboard_submit_handler(
                 Json(json!({"error": "db"})),
             )
         })?
-        .ok_or((StatusCode::NOT_FOUND, Json(json!({"error": "run not found"}))))?;
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "run not found"})),
+        ))?;
     if run.stats.is_none() {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -742,7 +748,10 @@ mod request_id_tests {
     #[test]
     fn bearer_token_extracts_valid_value() {
         let header = HeaderValue::from_static("Bearer token123");
-        assert_eq!(extract_bearer_token(Some(&header)).ok().flatten(), Some("token123"));
+        assert_eq!(
+            extract_bearer_token(Some(&header)).ok().flatten(),
+            Some("token123")
+        );
     }
 
     #[test]

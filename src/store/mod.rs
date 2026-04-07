@@ -138,14 +138,12 @@ pub async fn submit_leaderboard_run(
     user_id: Option<&str>,
 ) -> Result<(), sqlx::Error> {
     let submission_id = Uuid::new_v4().to_string();
-    sqlx::query(
-        "INSERT INTO leaderboard_submissions (id, run_id, user_id) VALUES (?, ?, ?)",
-    )
-    .bind(submission_id)
-    .bind(run_id)
-    .bind(user_id)
-    .execute(pool)
-    .await?;
+    sqlx::query("INSERT INTO leaderboard_submissions (id, run_id, user_id) VALUES (?, ?, ?)")
+        .bind(submission_id)
+        .bind(run_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
 
     if let Some(user_id) = user_id {
         bind_run_user(pool, run_id, user_id).await?;

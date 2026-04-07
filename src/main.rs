@@ -1,7 +1,7 @@
-use ctf_maze_arena::api;
-use ctf_maze_arena::solve;
 use axum::http::{header, HeaderName, HeaderValue, Request};
 use axum::middleware;
+use ctf_maze_arena::api;
+use ctf_maze_arena::solve;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::HashMap;
 use std::fs;
@@ -35,10 +35,8 @@ impl RateLimitConfig {
     const DEFAULT_EXPENSIVE_BURST: u32 = 10;
 
     fn from_env() -> Self {
-        let per_second = parse_u64_env(
-            "RATE_LIMIT_PER_SECOND",
-            RateLimitConfig::DEFAULT_PER_SECOND,
-        );
+        let per_second =
+            parse_u64_env("RATE_LIMIT_PER_SECOND", RateLimitConfig::DEFAULT_PER_SECOND);
         let burst = parse_u32_env("RATE_LIMIT_BURST", RateLimitConfig::DEFAULT_BURST);
         let expensive_per_second = parse_u64_env(
             "RATE_LIMIT_EXPENSIVE_PER_SECOND",
@@ -174,29 +172,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         rate_limit.expensive_burst,
         rate_limit.trust_proxy,
     )
-        .layer(middleware::from_fn_with_state(
-            api::JwtConfig {
-                secret: auth_config.jwt_secret.clone(),
-                clock_skew_secs: auth_config.clock_skew_secs,
-                auth_mode: auth_config.mode,
-            },
-            api::jwt_claims_middleware,
-        ))
-        .layer(trace_layer)
-        .layer(middleware::from_fn(api::request_id_middleware))
-        .layer(SetResponseHeaderLayer::if_not_present(
-            header::X_CONTENT_TYPE_OPTIONS,
-            HeaderValue::from_static("nosniff"),
-        ))
-        .layer(SetResponseHeaderLayer::if_not_present(
-            HeaderName::from_static("x-frame-options"),
-            HeaderValue::from_static("DENY"),
-        ))
-        .layer(SetResponseHeaderLayer::if_not_present(
-            header::REFERRER_POLICY,
-            HeaderValue::from_static("strict-origin-when-cross-origin"),
-        ))
-        .layer(cors);
+    .layer(middleware::from_fn_with_state(
+        api::JwtConfig {
+            secret: auth_config.jwt_secret.clone(),
+            clock_skew_secs: auth_config.clock_skew_secs,
+            auth_mode: auth_config.mode,
+        },
+        api::jwt_claims_middleware,
+    ))
+    .layer(trace_layer)
+    .layer(middleware::from_fn(api::request_id_middleware))
+    .layer(SetResponseHeaderLayer::if_not_present(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    ))
+    .layer(SetResponseHeaderLayer::if_not_present(
+        HeaderName::from_static("x-frame-options"),
+        HeaderValue::from_static("DENY"),
+    ))
+    .layer(SetResponseHeaderLayer::if_not_present(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
+    ))
+    .layer(cors);
     let port: u16 = std::env::var("PORT")
         .ok()
         .and_then(|p| p.parse().ok())
@@ -262,7 +260,10 @@ fn cors_layer_from_env() -> CorsLayer {
             for origin in origins {
                 match HeaderValue::from_str(&origin) {
                     Ok(value) => header_values.push(value),
-                    Err(_) => tracing::warn!("Ignoring invalid CORS origin in ALLOWED_ORIGINS: {}", origin),
+                    Err(_) => tracing::warn!(
+                        "Ignoring invalid CORS origin in ALLOWED_ORIGINS: {}",
+                        origin
+                    ),
                 }
             }
 
@@ -422,7 +423,10 @@ mod tests {
 
     #[test]
     fn parse_allowed_origins_unset_is_distinct_from_empty() {
-        assert_eq!(parse_allowed_origins_env(None), AllowedOriginsSetting::Unset);
+        assert_eq!(
+            parse_allowed_origins_env(None),
+            AllowedOriginsSetting::Unset
+        );
         assert_eq!(
             parse_allowed_origins_env(Some("")),
             AllowedOriginsSetting::Explicit(Vec::new())
