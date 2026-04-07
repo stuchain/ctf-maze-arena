@@ -20,6 +20,7 @@ Interactive maze playground: generate seeded mazes (Kruskal, Prim, DFS), run sol
 - [docs/ALGORITHMS.md](docs/ALGORITHMS.md) — maze generation and solver notes
 - [docs/deployment-runbook.md](docs/deployment-runbook.md) — deployment and environment operations
 - [docs/observability-runbook.md](docs/observability-runbook.md) — request tracing, log triage, and 429 handling
+- [docs/e2e-runbook.md](docs/e2e-runbook.md) — local Playwright setup, workflows, and trace debugging
 
 ## Quick start
 
