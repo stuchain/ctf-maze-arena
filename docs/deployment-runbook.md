@@ -77,3 +77,4 @@ Do not commit `.env` files with real credentials or tokens. Keep secrets in your
 - See [`docker-compose.yml`](../docker-compose.yml) and [`.env.example`](../.env.example) for a local stack with a bind-mounted `./data` directory.
 - Use [`scripts/verify-phase12-14.ps1`](../scripts/verify-phase12-14.ps1) for reproducible phase 12-14 checks.
 - Checklist/evidence mapping is tracked in [`phase-12-14-verification.md`](./phase-12-14-verification.md).
+- Day-1 incident handling and request correlation steps live in [`observability-runbook.md`](./observability-runbook.md).

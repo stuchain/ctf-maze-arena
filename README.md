@@ -18,6 +18,8 @@ Interactive maze playground: generate seeded mazes (Kruskal, Prim, DFS), run sol
 
 - [docs/API.md](docs/API.md) — HTTP and WebSocket API overview
 - [docs/ALGORITHMS.md](docs/ALGORITHMS.md) — maze generation and solver notes
+- [docs/deployment-runbook.md](docs/deployment-runbook.md) — deployment and environment operations
+- [docs/observability-runbook.md](docs/observability-runbook.md) — request tracing, log triage, and 429 handling
 
 ## Quick start
 
