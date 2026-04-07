@@ -59,6 +59,23 @@ export default function Home() {
 
   const frame = frames[frames.length - 1];
 
+  const authHeaders = async (): Promise<Record<string, string>> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authStatus !== 'authenticated') {
+      return headers;
+    }
+
+    const tokenRes = await fetch('/api/token');
+    if (!tokenRes.ok) {
+      return headers;
+    }
+    const tokenData = (await tokenRes.json()) as { token?: string };
+    if (tokenData.token) {
+      headers.Authorization = `Bearer ${tokenData.token}`;
+    }
+    return headers;
+  };
+
   const handleGenerate = async (params: GenerateFormParams) => {
     setLoading(true);
     setError(null);
@@ -182,7 +199,7 @@ export default function Home() {
             try {
               const res = await fetch(`${API}/api/solve`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: await authHeaders(),
                 body: JSON.stringify({ mazeId, solver }),
               });
 
