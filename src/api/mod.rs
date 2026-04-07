@@ -42,6 +42,15 @@ const BEARER_PREFIX: &str = "Bearer ";
 pub struct JwtConfig {
     pub secret: Option<String>,
     pub clock_skew_secs: u64,
+    pub auth_mode: AuthMode,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthMode {
+    Anonymous,
+    Jwt,
+    OptionalJwt,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +67,11 @@ pub async fn jwt_claims_middleware(
     mut req: Request<axum::body::Body>,
     next: Next,
 ) -> Response {
+    if config.auth_mode == AuthMode::Anonymous {
+        return next.run(req).await;
+    }
+
+    let protected = is_protected_route(req.method(), req.uri().path());
     let token = match extract_bearer_token(req.headers().get(axum::http::header::AUTHORIZATION)) {
         Ok(token) => token,
         Err(()) => {
@@ -68,6 +82,14 @@ pub async fn jwt_claims_middleware(
                 .into_response()
         }
     };
+
+    if protected && token.is_none() && config.auth_mode == AuthMode::Jwt {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "missing bearer token"})),
+        )
+            .into_response();
+    }
 
     if let Some(token) = token {
         let Some(secret) = config.secret.as_deref() else {
@@ -131,6 +153,11 @@ fn decode_claims(
     }
 
     Ok(token_data.claims)
+}
+
+fn is_protected_route(method: &axum::http::Method, path: &str) -> bool {
+    (method == axum::http::Method::POST && path == "/api/solve")
+        || (method == axum::http::Method::POST && path == "/api/leaderboard")
 }
 
 /// Per-request middleware that propagates or generates a request ID.

@@ -64,6 +64,7 @@ impl RateLimitConfig {
 struct AuthConfig {
     jwt_secret: Option<String>,
     clock_skew_secs: u64,
+    mode: api::AuthMode,
 }
 
 impl AuthConfig {
@@ -75,10 +76,12 @@ impl AuthConfig {
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty());
         let clock_skew_secs = parse_u64_env("JWT_CLOCK_SKEW_SECS", Self::DEFAULT_CLOCK_SKEW_SECS);
+        let mode = parse_auth_mode_env(std::env::var("AUTH_MODE").ok().as_deref());
 
         Self {
             jwt_secret,
             clock_skew_secs,
+            mode,
         }
     }
 }
@@ -133,6 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing::info!(
         jwt_secret_configured = auth_config.jwt_secret.is_some(),
         jwt_clock_skew_secs = auth_config.clock_skew_secs,
+        auth_mode = ?auth_config.mode,
         "loaded auth config"
     );
 
@@ -174,6 +178,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             api::JwtConfig {
                 secret: auth_config.jwt_secret.clone(),
                 clock_skew_secs: auth_config.clock_skew_secs,
+                auth_mode: auth_config.mode,
             },
             api::jwt_claims_middleware,
         ))
@@ -324,6 +329,21 @@ fn parse_allowed_origins_env(value: Option<&str>) -> AllowedOriginsSetting {
     match value {
         None => AllowedOriginsSetting::Unset,
         Some(raw) => AllowedOriginsSetting::Explicit(parse_allowed_origins(raw)),
+    }
+}
+
+fn parse_auth_mode_env(value: Option<&str>) -> api::AuthMode {
+    match value.map(str::trim) {
+        Some(v) if v.eq_ignore_ascii_case("jwt") => api::AuthMode::Jwt,
+        Some(v) if v.eq_ignore_ascii_case("optional_jwt") => api::AuthMode::OptionalJwt,
+        Some(v) if !v.is_empty() && !v.eq_ignore_ascii_case("anonymous") => {
+            tracing::warn!(
+                "AUTH_MODE has unsupported value {:?}; defaulting to anonymous",
+                v
+            );
+            api::AuthMode::Anonymous
+        }
+        _ => api::AuthMode::Anonymous,
     }
 }
 
