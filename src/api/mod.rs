@@ -156,8 +156,7 @@ fn decode_claims(
 }
 
 fn is_protected_route(method: &axum::http::Method, path: &str) -> bool {
-    (method == axum::http::Method::POST && path == "/api/solve")
-        || (method == axum::http::Method::POST && path == "/api/leaderboard")
+    method == axum::http::Method::POST && (path == "/api/solve" || path == "/api/leaderboard")
 }
 
 /// Per-request middleware that propagates or generates a request ID.

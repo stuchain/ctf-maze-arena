@@ -54,7 +54,7 @@ pub fn decimate_frames(frames: Vec<ReplayFrame>, step: u32) -> Vec<ReplayFrame> 
             out.push(f.clone());
             break;
         }
-        if (i as u32) % step == 0 {
+        if (i as u32).is_multiple_of(step) {
             out.push(f.clone());
         }
     }
