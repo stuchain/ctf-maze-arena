@@ -1,6 +1,7 @@
 use ctf_maze_arena::api;
 use ctf_maze_arena::solve;
 use axum::http::{header, HeaderName, HeaderValue};
+use axum::middleware;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::HashMap;
 use std::fs;
@@ -98,6 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         rate_limit.expensive_burst,
         rate_limit.trust_proxy,
     )
+        .layer(middleware::from_fn(api::request_id_middleware))
         .layer(SetResponseHeaderLayer::if_not_present(
             header::X_CONTENT_TYPE_OPTIONS,
             HeaderValue::from_static("nosniff"),

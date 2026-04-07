@@ -1,6 +1,8 @@
 use axum::{
     extract::{ws::WebSocketUpgrade, Path, Query},
-    http::StatusCode,
+    http::{HeaderValue, Request, StatusCode},
+    middleware::Next,
+    response::Response,
     routing::{get, post},
     Extension, Json, Router,
 };
@@ -14,6 +16,8 @@ use tower_governor::{
     key_extractor::{PeerIpKeyExtractor, SmartIpKeyExtractor},
     GovernorLayer,
 };
+use tracing::Instrument;
+use uuid::Uuid;
 
 use crate::maze::gen::{generate, GeneratorAlgo};
 use crate::solve::SolveStats;
@@ -24,6 +28,53 @@ pub struct AppState {
     pub solvers: crate::solve::SolverRegistry,
     /// Per-run broadcast senders so WebSocket clients can subscribe to frame JSON lines.
     pub stream_broadcasts: Arc<RwLock<HashMap<String, broadcast::Sender<String>>>>,
+}
+
+pub const REQUEST_ID_HEADER: &str = "x-request-id";
+const MAX_REQUEST_ID_LEN: usize = 128;
+
+/// Per-request middleware that propagates or generates a request ID.
+/// The value is echoed in the response header and attached to a tracing span.
+pub async fn request_id_middleware(mut req: Request<axum::body::Body>, next: Next) -> Response {
+    let request_id = req
+        .headers()
+        .get(REQUEST_ID_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(sanitize_request_id)
+        .unwrap_or_else(generate_request_id);
+
+    req.extensions_mut().insert(request_id.clone());
+
+    let span = tracing::info_span!("http_request", request_id = %request_id);
+    let mut response = next.run(req).instrument(span).await;
+
+    if let Ok(header_value) = HeaderValue::from_str(&request_id) {
+        response
+            .headers_mut()
+            .insert(REQUEST_ID_HEADER, header_value);
+    }
+
+    response
+}
+
+fn generate_request_id() -> String {
+    Uuid::new_v4().to_string()
+}
+
+fn sanitize_request_id(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.len() > MAX_REQUEST_ID_LEN {
+        return None;
+    }
+
+    let is_allowed = trimmed
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b':' | b'/'));
+    if !is_allowed {
+        return None;
+    }
+
+    Some(trimmed.to_string())
 }
 
 pub fn router(
@@ -461,5 +512,31 @@ async fn handle_socket(
             Err(RecvError::Lagged(_)) => continue,
             Err(RecvError::Closed) => break,
         }
+    }
+}
+
+#[cfg(test)]
+mod request_id_tests {
+    use super::sanitize_request_id;
+
+    #[test]
+    fn request_id_accepts_safe_token() {
+        assert_eq!(
+            sanitize_request_id("abc-123_DEF:/v1.req"),
+            Some("abc-123_DEF:/v1.req".to_string())
+        );
+    }
+
+    #[test]
+    fn request_id_rejects_invalid_chars() {
+        assert_eq!(sanitize_request_id("abc\n123"), None);
+        assert_eq!(sanitize_request_id("abc 123"), None);
+    }
+
+    #[test]
+    fn request_id_rejects_empty_or_too_long_values() {
+        assert_eq!(sanitize_request_id(""), None);
+        assert_eq!(sanitize_request_id("   "), None);
+        assert_eq!(sanitize_request_id(&"a".repeat(129)), None);
     }
 }
