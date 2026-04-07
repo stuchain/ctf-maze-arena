@@ -107,7 +107,10 @@ export default function Home() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
+    <main
+      id="main-content"
+      className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black"
+    >
       <div className="flex flex-col items-center gap-6 p-8">
         <SolverPicker value={solver} onChange={setSolver} />
         <button
@@ -199,6 +202,6 @@ export default function Home() {
           </div>
         ) : null}
       </div>
-    </div>
+    </main>
   );
 }
