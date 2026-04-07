@@ -1,16 +1,17 @@
 use ctf_maze_arena::api;
 use ctf_maze_arena::solve;
-use axum::http::{header, HeaderName, HeaderValue};
+use axum::http::{header, HeaderName, HeaderValue, Request};
 use axum::middleware;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::set_header::SetResponseHeaderLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tower_http::trace::TraceLayer;
 
 #[derive(Debug, PartialEq, Eq)]
 enum AllowedOriginsSetting {
@@ -59,16 +60,33 @@ impl RateLimitConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LogFormat {
+    Pretty,
+    Json,
+}
+
+impl LogFormat {
+    fn from_env() -> Self {
+        match std::env::var("LOG_FORMAT") {
+            Ok(v) if v.trim().eq_ignore_ascii_case("json") => LogFormat::Json,
+            Ok(v) if !v.trim().is_empty() && !v.trim().eq_ignore_ascii_case("pretty") => {
+                tracing::warn!(
+                    "LOG_FORMAT has unsupported value {:?}; using pretty formatter",
+                    v
+                );
+                LogFormat::Pretty
+            }
+            _ => LogFormat::Pretty,
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenvy::dotenv().ok();
 
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
-        ))
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    init_logging();
 
     let pool = init_db().await?;
     tracing::info!("database initialized");
@@ -91,6 +109,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let cors = cors_layer_from_env();
 
+    let trace_layer = TraceLayer::new_for_http()
+        .make_span_with(|request: &Request<_>| {
+            let request_id = request
+                .headers()
+                .get(api::REQUEST_ID_HEADER)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("unknown");
+            tracing::info_span!(
+                "http_request",
+                request_id = %request_id,
+                method = %request.method(),
+                path = %request.uri().path()
+            )
+        })
+        .on_response(
+            |response: &axum::response::Response, latency: Duration, _span: &tracing::Span| {
+                tracing::info!(
+                    status = response.status().as_u16(),
+                    latency_ms = latency.as_millis() as u64,
+                    "request completed"
+                );
+            },
+        );
+
     let app = api::router(
         state,
         rate_limit.per_second,
@@ -99,6 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         rate_limit.expensive_burst,
         rate_limit.trust_proxy,
     )
+        .layer(trace_layer)
         .layer(middleware::from_fn(api::request_id_middleware))
         .layer(SetResponseHeaderLayer::if_not_present(
             header::X_CONTENT_TYPE_OPTIONS,
@@ -126,6 +169,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     )
     .await?;
     Ok(())
+}
+
+fn init_logging() {
+    let env_filter = tracing_subscriber::EnvFilter::new(
+        std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
+    );
+    match LogFormat::from_env() {
+        LogFormat::Json => tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .json()
+            .flatten_event(true)
+            .init(),
+        LogFormat::Pretty => tracing_subscriber::fmt().with_env_filter(env_filter).init(),
+    }
 }
 
 fn cors_layer_from_env() -> CorsLayer {

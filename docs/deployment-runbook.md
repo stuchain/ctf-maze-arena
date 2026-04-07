@@ -15,6 +15,7 @@ This project ships a Rust API in a container ([`Dockerfile`](../Dockerfile)) wit
 | `PORT` | HTTP listen port inside the container (the app reads `PORT`; default `8080`). | `PORT=10000` | Usually platform-provided |
 | `DATABASE_URL` | SQLite path; must be on persistent storage in production. | `DATABASE_URL=sqlite:./data/ctf_maze.db` | Yes |
 | `RUST_LOG` | Application log verbosity. | `RUST_LOG=info` | Recommended |
+| `LOG_FORMAT` | Log output format (`pretty` default, `json` for machine parsing). | `LOG_FORMAT=json` | Recommended |
 | `ALLOWED_ORIGINS` | Comma-separated browser origin allowlist for CORS. Trailing slashes are normalized. | `ALLOWED_ORIGINS=https://app.example.com,https://www.example.com` | Yes (go-live requirement) |
 | `CORS_PERMISSIVE` | Escape hatch to allow permissive CORS in release when explicitly set to `true`. | `CORS_PERMISSIVE=true` | No (use only for controlled staging) |
 | `RATE_LIMIT_PER_SECOND` | Baseline per-IP refill rate for limited API routes. | `RATE_LIMIT_PER_SECOND=20` | Recommended |
@@ -26,6 +27,12 @@ This project ships a Rust API in a container ([`Dockerfile`](../Dockerfile)) wit
 Platforms often set `PORT` for you. **If the app fails to bind**, confirm you are not hardcoding `8080` in the platform UI while the process expects another port.
 
 Do not commit `.env` files with real credentials or tokens. Keep secrets in your platform's secret manager (Render/Fly/etc.).
+
+## Log format
+
+- Default output is human-readable (`LOG_FORMAT=pretty`).
+- For centralized logging stacks, set `LOG_FORMAT=json` so each line is structured JSON.
+- Validate JSON logs with a quick smoke test: run one API request and pipe output to `jq`.
 
 ## TLS
 
