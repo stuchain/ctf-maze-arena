@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "lint:a11y": "eslint --max-warnings=0 --rule \"@typescript-eslint/no-explicit-any: off\" --rule \"react-hooks/set-state-in-effect: off\" --rule \"jsx-a11y/aria-role: error\" --rule \"jsx-a11y/label-has-associated-control: error\" --rule \"jsx-a11y/interactive-supports-focus: error\" --rule \"jsx-a11y/no-static-element-interactions: error\" app components hooks",
     "test:e2e": "playwright test",
     "test:e2e:ci": "playwright test --reporter=line"
   },
@@ -24,6 +25,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
