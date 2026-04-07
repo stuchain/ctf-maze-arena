@@ -32,6 +32,8 @@ pub struct AppState {
 
 pub const REQUEST_ID_HEADER: &str = "x-request-id";
 const MAX_REQUEST_ID_LEN: usize = 128;
+const BUILD_VERSION: &str = env!("CARGO_PKG_VERSION");
+const BUILD_GIT_SHA: &str = env!("GIT_SHA");
 
 /// Per-request middleware that propagates or generates a request ID.
 /// The value is echoed in the response header and attached to a tracing span.
@@ -188,8 +190,20 @@ fn api_routes(
     }
 }
 
-async fn health_handler() -> &'static str {
-    "ok"
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HealthResponse {
+    status: &'static str,
+    version: &'static str,
+    git_sha: &'static str,
+}
+
+async fn health_handler() -> Json<HealthResponse> {
+    Json(HealthResponse {
+        status: "ok",
+        version: BUILD_VERSION,
+        git_sha: BUILD_GIT_SHA,
+    })
 }
 
 #[derive(Debug, Serialize)]

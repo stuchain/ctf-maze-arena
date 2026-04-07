@@ -70,7 +70,7 @@ Do not commit `.env` files with real credentials or tokens. Keep secrets in your
 
 ## Health check
 
-- `GET /api/health` should return `ok`. Configure your platform health check to use that path.
+- `GET /api/health` should return JSON with `status: "ok"` plus build metadata (`version`, `gitSha`). Configure your platform health check to use that path.
 
 ## Local parity
 

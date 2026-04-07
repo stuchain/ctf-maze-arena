@@ -6,7 +6,15 @@ All REST routes below are under `/api`.
 
 ## GET /api/health
 
-Returns plain text: `ok`.
+Returns build-aware JSON:
+
+```json
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "gitSha": "a1b2c3d4e5f6"
+}
+```
 
 ## POST /api/maze/generate
 
