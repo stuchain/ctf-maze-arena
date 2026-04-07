@@ -391,9 +391,10 @@ async fn init_db() -> Result<sqlx::SqlitePool, sqlx::Error> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_allowed_origins, parse_allowed_origins_env, parse_bool_env, parse_u32_env,
-        parse_u64_env, AllowedOriginsSetting, RateLimitConfig,
+        parse_allowed_origins, parse_allowed_origins_env, parse_auth_mode_env, parse_bool_env,
+        parse_u32_env, parse_u64_env, AllowedOriginsSetting, RateLimitConfig,
     };
+    use crate::api::AuthMode;
 
     #[test]
     fn parse_allowed_origins_splits_and_trims() {
@@ -491,5 +492,16 @@ mod tests {
         std::env::remove_var("RATE_LIMIT_EXPENSIVE_PER_SECOND");
         std::env::remove_var("RATE_LIMIT_EXPENSIVE_BURST");
         std::env::remove_var("TRUST_PROXY");
+    }
+
+    #[test]
+    fn parse_auth_mode_env_maps_supported_values() {
+        assert_eq!(parse_auth_mode_env(None), AuthMode::Anonymous);
+        assert_eq!(parse_auth_mode_env(Some("anonymous")), AuthMode::Anonymous);
+        assert_eq!(parse_auth_mode_env(Some("jwt")), AuthMode::Jwt);
+        assert_eq!(
+            parse_auth_mode_env(Some("optional_jwt")),
+            AuthMode::OptionalJwt
+        );
     }
 }

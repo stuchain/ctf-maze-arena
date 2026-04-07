@@ -770,4 +770,24 @@ mod request_id_tests {
         let decoded = decode_claims(&token, "test-secret", 60).expect("valid token");
         assert_eq!(decoded.sub, "github:1");
     }
+
+    #[test]
+    fn protected_route_matrix_matches_auth_contract() {
+        assert!(super::is_protected_route(
+            &axum::http::Method::POST,
+            "/api/solve"
+        ));
+        assert!(super::is_protected_route(
+            &axum::http::Method::POST,
+            "/api/leaderboard"
+        ));
+        assert!(!super::is_protected_route(
+            &axum::http::Method::GET,
+            "/api/leaderboard"
+        ));
+        assert!(!super::is_protected_route(
+            &axum::http::Method::GET,
+            "/api/health"
+        ));
+    }
 }
