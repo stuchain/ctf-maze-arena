@@ -37,14 +37,21 @@ function getCellFill(
 }
 
 export function MazeGrid({ maze, frontier, visited, current, path }: MazeGridProps) {
-  if (!maze) return <div>No maze</div>;
+  if (!maze) return <div data-testid="maze-grid-empty">No maze</div>;
 
   const { width, height, walls, start, goal } = maze;
   const cellSize = 24;
 
   return (
-    <div style={{ display: 'inline-block', position: 'relative' }}>
-      <svg width={width * cellSize + 1} height={height * cellSize + 1}>
+    <div
+      style={{ display: 'inline-block', position: 'relative' }}
+      data-testid="maze-grid"
+    >
+      <svg
+        width={width * cellSize + 1}
+        height={height * cellSize + 1}
+        data-testid="maze-grid-svg"
+      >
         {/* Cells */}
         {Array.from({ length: width * height }, (_, i) => {
           const x = i % width;
