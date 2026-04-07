@@ -19,7 +19,7 @@ export function SolverPicker({ value, onChange, id = 'solver-picker' }: SolverPi
       id={id}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="border rounded px-3 py-2"
+      className="border rounded px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1"
       data-testid="solver-picker"
     >
       {SOLVERS.map((s) => (

@@ -41,7 +41,7 @@ export function GenerateForm({ onSubmit, loading }: GenerateFormProps) {
           max={50}
           value={w}
           onChange={(e) => setW(Number(e.target.value))}
-          className="border w-16"
+          className="border w-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1"
         />
       </label>
 
@@ -54,7 +54,7 @@ export function GenerateForm({ onSubmit, loading }: GenerateFormProps) {
           max={50}
           value={h}
           onChange={(e) => setH(Number(e.target.value))}
-          className="border w-16"
+          className="border w-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1"
         />
       </label>
 
@@ -66,7 +66,7 @@ export function GenerateForm({ onSubmit, loading }: GenerateFormProps) {
           min={0}
           value={seed}
           onChange={(e) => setSeed(Number(e.target.value))}
-          className="border w-24"
+          className="border w-24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1"
         />
       </label>
 
@@ -76,7 +76,7 @@ export function GenerateForm({ onSubmit, loading }: GenerateFormProps) {
           id="maze-algo-select"
           value={algo}
           onChange={(e) => setAlgo(e.target.value)}
-          className="border ml-2"
+          className="border ml-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1"
         >
           <option value="KRUSKAL">Kruskal</option>
           <option value="PRIM">Prim</option>
@@ -87,7 +87,7 @@ export function GenerateForm({ onSubmit, loading }: GenerateFormProps) {
       <button
         type="submit"
         disabled={loading}
-        className="bg-blue-500 text-white px-4 py-2 rounded disabled:opacity-50"
+        className="bg-blue-500 text-white px-4 py-2 rounded disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 focus-visible:ring-offset-2"
         data-testid="generate-button"
       >
         {loading ? 'Generating...' : 'Generate Maze'}

@@ -120,7 +120,7 @@ export default function Home() {
           type="button"
           onClick={() => void handleDaily()}
           disabled={loading}
-          className="rounded bg-violet-600 px-4 py-2 text-white text-sm disabled:opacity-50"
+          className="rounded bg-violet-600 px-4 py-2 text-white text-sm disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2"
         >
           Daily Challenge
         </button>
@@ -171,7 +171,7 @@ export default function Home() {
             }
           }}
           disabled={!mazeId || solveLoading}
-          className="bg-green-500 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          className="bg-green-500 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-300 focus-visible:ring-offset-2"
           data-testid="solve-button"
         >
           {solveLoading ? 'Solving...' : 'Solve'}
