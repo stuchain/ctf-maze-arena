@@ -1,11 +1,13 @@
 use axum::{
+    extract::State,
     extract::{ws::WebSocketUpgrade, Path, Query},
     http::{HeaderValue, Request, StatusCode},
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Extension, Json, Router,
 };
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -34,6 +36,102 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
 const MAX_REQUEST_ID_LEN: usize = 128;
 const BUILD_VERSION: &str = env!("CARGO_PKG_VERSION");
 const BUILD_GIT_SHA: &str = env!("GIT_SHA");
+const BEARER_PREFIX: &str = "Bearer ";
+
+#[derive(Debug, Clone)]
+pub struct JwtConfig {
+    pub secret: Option<String>,
+    pub clock_skew_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthClaims {
+    pub sub: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    pub exp: usize,
+    pub iat: usize,
+}
+
+pub async fn jwt_claims_middleware(
+    State(config): State<JwtConfig>,
+    mut req: Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    let token = match extract_bearer_token(req.headers().get(axum::http::header::AUTHORIZATION)) {
+        Ok(token) => token,
+        Err(()) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "invalid authorization header"})),
+            )
+                .into_response()
+        }
+    };
+
+    if let Some(token) = token {
+        let Some(secret) = config.secret.as_deref() else {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "jwt secret is not configured"})),
+            )
+                .into_response();
+        };
+
+        let claims = match decode_claims(token, secret, config.clock_skew_secs) {
+            Ok(claims) => claims,
+            Err(_) => {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({"error": "invalid bearer token"})),
+                )
+                    .into_response()
+            }
+        };
+        req.extensions_mut().insert(claims);
+    }
+
+    next.run(req).await
+}
+
+fn extract_bearer_token(value: Option<&HeaderValue>) -> Result<Option<&str>, ()> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let raw = value.to_str().map_err(|_| ())?;
+    if !raw.starts_with(BEARER_PREFIX) {
+        return Err(());
+    }
+    let token = raw[BEARER_PREFIX.len()..].trim();
+    if token.is_empty() {
+        return Err(());
+    }
+    Ok(Some(token))
+}
+
+fn decode_claims(
+    token: &str,
+    secret: &str,
+    clock_skew_secs: u64,
+) -> Result<AuthClaims, jsonwebtoken::errors::Error> {
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.validate_exp = true;
+    validation.leeway = clock_skew_secs;
+    let token_data = decode::<AuthClaims>(
+        token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &validation,
+    )?;
+
+    let now = chrono::Utc::now().timestamp().max(0) as usize;
+    if token_data.claims.iat > now + clock_skew_secs as usize {
+        return Err(jsonwebtoken::errors::Error::from(
+            jsonwebtoken::errors::ErrorKind::InvalidToken,
+        ));
+    }
+
+    Ok(token_data.claims)
+}
 
 /// Per-request middleware that propagates or generates a request ID.
 /// The value is echoed in the response header and attached to a tracing span.
@@ -531,7 +629,9 @@ async fn handle_socket(
 
 #[cfg(test)]
 mod request_id_tests {
-    use super::sanitize_request_id;
+    use super::{decode_claims, extract_bearer_token, sanitize_request_id, AuthClaims};
+    use axum::http::HeaderValue;
+    use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 
     #[test]
     fn request_id_accepts_safe_token() {
@@ -552,5 +652,37 @@ mod request_id_tests {
         assert_eq!(sanitize_request_id(""), None);
         assert_eq!(sanitize_request_id("   "), None);
         assert_eq!(sanitize_request_id(&"a".repeat(129)), None);
+    }
+
+    #[test]
+    fn bearer_token_extracts_valid_value() {
+        let header = HeaderValue::from_static("Bearer token123");
+        assert_eq!(extract_bearer_token(Some(&header)).ok().flatten(), Some("token123"));
+    }
+
+    #[test]
+    fn bearer_token_rejects_non_bearer_format() {
+        let header = HeaderValue::from_static("Basic abc");
+        assert!(extract_bearer_token(Some(&header)).is_err());
+    }
+
+    #[test]
+    fn decode_claims_rejects_bad_signature_and_accepts_valid() {
+        let claims = AuthClaims {
+            sub: "github:1".to_string(),
+            name: Some("tester".to_string()),
+            exp: (chrono::Utc::now().timestamp() + 300) as usize,
+            iat: chrono::Utc::now().timestamp() as usize,
+        };
+        let token = encode(
+            &Header::new(Algorithm::HS256),
+            &claims,
+            &EncodingKey::from_secret(b"test-secret"),
+        )
+        .expect("token");
+
+        assert!(decode_claims(&token, "wrong-secret", 60).is_err());
+        let decoded = decode_claims(&token, "test-secret", 60).expect("valid token");
+        assert_eq!(decoded.sub, "github:1");
     }
 }

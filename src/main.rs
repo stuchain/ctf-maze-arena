@@ -60,6 +60,29 @@ impl RateLimitConfig {
     }
 }
 
+#[derive(Debug, Clone)]
+struct AuthConfig {
+    jwt_secret: Option<String>,
+    clock_skew_secs: u64,
+}
+
+impl AuthConfig {
+    const DEFAULT_CLOCK_SKEW_SECS: u64 = 60;
+
+    fn from_env() -> Self {
+        let jwt_secret = std::env::var("JWT_SECRET")
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty());
+        let clock_skew_secs = parse_u64_env("JWT_CLOCK_SKEW_SECS", Self::DEFAULT_CLOCK_SKEW_SECS);
+
+        Self {
+            jwt_secret,
+            clock_skew_secs,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LogFormat {
     Pretty,
@@ -98,6 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     });
 
     let rate_limit = RateLimitConfig::from_env();
+    let auth_config = AuthConfig::from_env();
     tracing::info!(
         rate_limit_per_second = rate_limit.per_second,
         rate_limit_burst = rate_limit.burst,
@@ -105,6 +129,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         rate_limit_expensive_burst = rate_limit.expensive_burst,
         trust_proxy = rate_limit.trust_proxy,
         "loaded rate limit config"
+    );
+    tracing::info!(
+        jwt_secret_configured = auth_config.jwt_secret.is_some(),
+        jwt_clock_skew_secs = auth_config.clock_skew_secs,
+        "loaded auth config"
     );
 
     let cors = cors_layer_from_env();
@@ -141,6 +170,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         rate_limit.expensive_burst,
         rate_limit.trust_proxy,
     )
+        .layer(middleware::from_fn_with_state(
+            api::JwtConfig {
+                secret: auth_config.jwt_secret.clone(),
+                clock_skew_secs: auth_config.clock_skew_secs,
+            },
+            api::jwt_claims_middleware,
+        ))
         .layer(trace_layer)
         .layer(middleware::from_fn(api::request_id_middleware))
         .layer(SetResponseHeaderLayer::if_not_present(

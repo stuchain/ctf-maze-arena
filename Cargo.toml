@@ -19,6 +19,7 @@ uuid = { version = "1", features = ["v4"] }
 tower-http = { version = "0.5", features = ["cors", "set-header", "trace"] }
 chrono = { version = "0.4", features = ["serde"] }
 tower_governor = "0.7"
+jsonwebtoken = "9"
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }
