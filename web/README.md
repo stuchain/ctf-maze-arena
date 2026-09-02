@@ -1,36 +1,26 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CTF Maze Arena web
 
-## Getting Started
+The Next.js frontend for CTF Maze Arena. It generates and displays mazes, streams solver progress, shows replays and results, and provides GitHub-backed identity features when authentication is enabled.
 
-First, run the development server:
+## Setup
 
-```bash
+```powershell
+Copy-Item .env.example .env.local
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The local application runs at <http://localhost:3000> and expects the Rust API at `NEXT_PUBLIC_API_URL`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+`NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_AUTH_MODE` are public values embedded in the browser bundle at build time. `AUTH_MODE`, GitHub OAuth credentials, `NEXTAUTH_SECRET`, and `JWT_SECRET` are server-only runtime values. Anonymous mode needs no secrets; `jwt` and `optional_jwt` modes fail fast unless every server-only authentication value in `.env.example` is configured.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Commands
 
-## Learn More
+- `npm run lint` — ESLint with warnings treated as failures.
+- `npm run typecheck` — strict TypeScript validation.
+- `npm run test:unit` — Vitest unit tests.
+- `npm run build` — production Next.js build.
+- `npm run check` — all four checks above.
+- `npm run test:e2e` — Playwright end-to-end suite.
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The active design roadmap is in [`../docs/v0.1`](../docs/v0.1/README.md).

@@ -1,5 +1,7 @@
+import { publicEnv } from '@/lib/env';
+
 export function createSolveStreamUrl(runId: string): string {
-  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-  const wsBase = base.replace(/^http/, "ws");
+  const base = publicEnv.NEXT_PUBLIC_API_URL;
+  const wsBase = base.replace(/^http/, 'ws');
   return `${wsBase}/api/solve/stream?runId=${encodeURIComponent(runId)}`;
 }

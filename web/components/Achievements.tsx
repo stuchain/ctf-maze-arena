@@ -1,24 +1,26 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { ACHIEVEMENTS, getEarnedAchievements } from '@/lib/achievements';
+import { useMemo, useSyncExternalStore } from 'react';
+import {
+  ACHIEVEMENTS,
+  EMPTY_ACHIEVEMENTS_SNAPSHOT,
+  getAchievementsSnapshot,
+  subscribeToAchievements,
+} from '@/lib/achievements';
 
-interface AchievementsProps {
-  refreshVersion?: number;
-}
-
-export function Achievements({ refreshVersion = 0 }: AchievementsProps) {
-  const [earned, setEarned] = useState<string[]>([]);
-
-  useEffect(() => {
-    setEarned(getEarnedAchievements());
-  }, [refreshVersion]);
+export function Achievements() {
+  const snapshot = useSyncExternalStore(
+    subscribeToAchievements,
+    getAchievementsSnapshot,
+    () => EMPTY_ACHIEVEMENTS_SNAPSHOT,
+  );
+  const earned = useMemo(() => new Set<string>(JSON.parse(snapshot)), [snapshot]);
 
   return (
     <div className="space-y-2 w-full max-w-md">
       <h3 className="text-sm font-semibold text-zinc-700">Achievements</h3>
       {ACHIEVEMENTS.map((a) => {
-        const isEarned = earned.includes(a.id);
+        const isEarned = earned.has(a.id);
         return (
           <div
             key={a.id}

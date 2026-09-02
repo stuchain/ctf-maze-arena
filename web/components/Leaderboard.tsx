@@ -1,12 +1,8 @@
 'use client';
 
-export interface LeaderboardEntry {
-  runId: string;
-  solver: string;
-  cost: number;
-  ms: number;
-  visited: number;
-}
+import type { LeaderboardEntry } from '@/lib/api';
+
+export type { LeaderboardEntry } from '@/lib/api';
 
 interface LeaderboardProps {
   entries: LeaderboardEntry[];

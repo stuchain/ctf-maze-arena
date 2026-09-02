@@ -9,11 +9,22 @@ import { SolverPicker } from '../components/SolverPicker';
 import { useSolveStream } from '../hooks/useSolveStream';
 import { backendMazeToMazeData } from '@/lib/maze';
 import { signIn, signOut, useSession } from 'next-auth/react';
+import {
+  dailyResponseSchema,
+  generateResponseSchema,
+  leaderboardResponseSchema,
+  requestJson,
+  solveResponseSchema,
+  toErrorMessage,
+  tokenResponseSchema,
+} from '@/lib/api';
+import { publicEnv } from '@/lib/env';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const API = publicEnv.NEXT_PUBLIC_API_URL;
 
 export default function Home() {
   const { data: session, status: authStatus } = useSession();
+  const authEnabled = publicEnv.NEXT_PUBLIC_AUTH_MODE !== 'anonymous';
   const [solver, setSolver] = useState('ASTAR');
 
   const [maze, setMaze] = useState<MazeData | null>(null);
@@ -28,18 +39,17 @@ export default function Home() {
     seed: number;
     date: string;
   } | null>(null);
-  const [achievementsRefresh, setAchievementsRefresh] = useState(0);
 
   useEffect(() => {
     if (!mazeId) {
       setLeaderboard([]);
       return;
     }
-    fetch(`${API}/api/leaderboard?mazeId=${encodeURIComponent(mazeId)}`)
-      .then((r) => (r.ok ? r.json() : Promise.resolve([])))
-      .then((data) =>
-        setLeaderboard(Array.isArray(data) ? data : []),
-      )
+    requestJson(
+      `${API}/api/leaderboard?mazeId=${encodeURIComponent(mazeId)}`,
+      leaderboardResponseSchema,
+    )
+      .then(setLeaderboard)
       .catch(() => setLeaderboard([]));
   }, [mazeId]);
 
@@ -51,12 +61,6 @@ export default function Home() {
     error: solveStreamError,
   } = useSolveStream(runId, solver);
 
-  useEffect(() => {
-    if (solveStreamStatus === 'finished') {
-      setAchievementsRefresh((v) => v + 1);
-    }
-  }, [solveStreamStatus]);
-
   const frame = frames[frames.length - 1];
 
   const authHeaders = async (): Promise<Record<string, string>> => {
@@ -65,13 +69,11 @@ export default function Home() {
       return headers;
     }
 
-    const tokenRes = await fetch('/api/token');
-    if (!tokenRes.ok) {
-      return headers;
-    }
-    const tokenData = (await tokenRes.json()) as { token?: string };
-    if (tokenData.token) {
+    try {
+      const tokenData = await requestJson('/api/token', tokenResponseSchema);
       headers.Authorization = `Bearer ${tokenData.token}`;
+    } catch {
+      return headers;
     }
     return headers;
   };
@@ -82,7 +84,7 @@ export default function Home() {
     setRunId(null);
 
     try {
-      const res = await fetch(`${API}/api/maze/generate`, {
+      const data = await requestJson(`${API}/api/maze/generate`, generateResponseSchema, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -92,17 +94,10 @@ export default function Home() {
           algo: params.algo,
         }),
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as any).error || res.statusText);
-      }
-
-      const data = await res.json();
       setMazeId(data.mazeId);
       setMaze(backendMazeToMazeData(data.maze));
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to generate maze');
+    } catch (cause: unknown) {
+      setError(toErrorMessage(cause, 'Failed to generate maze'));
     } finally {
       setLoading(false);
     }
@@ -111,17 +106,12 @@ export default function Home() {
   const handleDaily = async () => {
     setError(null);
     try {
-      const res = await fetch(`${API}/api/daily`);
-      if (!res.ok) throw new Error('Daily challenge unavailable');
-      const data = await res.json();
-      const seed = Number(data.seed);
-      const w = Number(data.w);
-      const h = Number(data.h);
+      const data = await requestJson(`${API}/api/daily`, dailyResponseSchema);
+      const { seed, w, h } = data;
       setDailyInfo({ seed, date: String(data.date ?? '') });
       await handleGenerate({ w, h, seed, algo: 'KRUSKAL' });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Daily challenge failed';
-      setError(msg);
+      setError(toErrorMessage(e, 'Daily challenge failed'));
     }
   };
 
@@ -132,7 +122,9 @@ export default function Home() {
     >
       <div className="flex flex-col items-center gap-6 p-8">
         <div className="flex items-center gap-3 text-sm">
-          {authStatus === 'authenticated' ? (
+          {!authEnabled ? (
+            <span>Play anonymously. GitHub profiles are disabled in this environment.</span>
+          ) : authStatus === 'authenticated' ? (
             <>
               <span>
                 Signed in as {session?.user?.name ?? session?.user?.email ?? 'GitHub user'}
@@ -197,21 +189,14 @@ export default function Home() {
             setRunId(null);
 
             try {
-              const res = await fetch(`${API}/api/solve`, {
+              const data = await requestJson(`${API}/api/solve`, solveResponseSchema, {
                 method: 'POST',
                 headers: await authHeaders(),
                 body: JSON.stringify({ mazeId, solver }),
               });
-
-              if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error((err as any).error || res.statusText);
-              }
-
-              const data = await res.json();
               setRunId(data.runId);
-            } catch (e: any) {
-              setError(e?.message ?? 'Solve failed');
+            } catch (cause: unknown) {
+              setError(toErrorMessage(cause, 'Solve failed'));
             } finally {
               setSolveLoading(false);
             }
@@ -223,16 +208,7 @@ export default function Home() {
           {solveLoading ? 'Solving...' : 'Solve'}
         </button>
 
-        {/* `mazeId` is stored now; Commit 59 will use it for the Solve button. */}
-        <div className="text-sm text-zinc-600">
-          {mazeId ? `mazeId: ${mazeId}` : 'no maze yet'}
-        </div>
-
-        <div className="text-sm text-zinc-600">
-          {runId ? `runId: ${runId}` : null}
-        </div>
-
-        <Achievements refreshVersion={achievementsRefresh} />
+        <Achievements />
 
         <div className="w-full max-w-md">
           <h2 className="text-sm font-semibold text-zinc-700 mb-2">Leaderboard</h2>

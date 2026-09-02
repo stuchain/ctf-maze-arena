@@ -7,7 +7,7 @@ Generate mazes, run solvers, stream solve progress, and view replays/leaderboard
 
 - Backend: Rust, Axum, SQLx, SQLite
 - Frontend: Next.js, React, TypeScript
-- Testing: Rust tests + Playwright E2E
+- Testing: Rust tests, Vitest unit tests, and Playwright E2E
 
 ## Prerequisites
 
@@ -27,12 +27,15 @@ Generate mazes, run solvers, stream solve progress, and view replays/leaderboard
 
    ```bash
    cd web
-   npm install
+   cp .env.example .env.local
+   npm ci
    npm run dev
    ```
 
 Backend default: `http://localhost:8080`  
 Frontend default: `http://localhost:3000`
+
+Run the canonical repository checks from PowerShell with `./scripts/verify.ps1`.
 
 ## Project structure
 
@@ -44,7 +47,7 @@ Frontend default: `http://localhost:3000`
 - `migrations/` - database migrations
 - `web/` - Next.js app
 
-## Authentication (Phase 18)
+## Authentication
 
 - Web auth: GitHub OAuth via NextAuth
 - API auth: short-lived Bearer JWT from `/api/token`
@@ -56,6 +59,7 @@ Frontend default: `http://localhost:3000`
 
 ## Useful docs
 
+- `docs/v0.1/README.md` — active v0.1 design roadmap and phase documents
 - `docs/API.md`
 - `docs/deployment-runbook.md`
 - `docs/e2e-runbook.md`

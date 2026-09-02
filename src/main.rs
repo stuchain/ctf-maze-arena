@@ -4,6 +4,7 @@ use ctf_maze_arena::api;
 use ctf_maze_arena::solve;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::HashMap;
+use std::fmt;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -68,7 +69,7 @@ struct AuthConfig {
 impl AuthConfig {
     const DEFAULT_CLOCK_SKEW_SECS: u64 = 60;
 
-    fn from_env() -> Self {
+    fn from_env() -> Result<Self, ConfigError> {
         let jwt_secret = std::env::var("JWT_SECRET")
             .ok()
             .map(|v| v.trim().to_string())
@@ -76,13 +77,26 @@ impl AuthConfig {
         let clock_skew_secs = parse_u64_env("JWT_CLOCK_SKEW_SECS", Self::DEFAULT_CLOCK_SKEW_SECS);
         let mode = parse_auth_mode_env(std::env::var("AUTH_MODE").ok().as_deref());
 
-        Self {
+        validate_jwt_secret(mode, jwt_secret.as_deref())?;
+
+        Ok(Self {
             jwt_secret,
             clock_skew_secs,
             mode,
-        }
+        })
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ConfigError(String);
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for ConfigError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LogFormat {
@@ -122,7 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     });
 
     let rate_limit = RateLimitConfig::from_env();
-    let auth_config = AuthConfig::from_env();
+    let auth_config = AuthConfig::from_env()?;
     tracing::info!(
         rate_limit_per_second = rate_limit.per_second,
         rate_limit_burst = rate_limit.burst,
@@ -195,10 +209,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         HeaderValue::from_static("strict-origin-when-cross-origin"),
     ))
     .layer(cors);
-    let port: u16 = std::env::var("PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(8080);
+    let port = parse_port_env(std::env::var("PORT").ok().as_deref())?;
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("listening on {}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -348,6 +359,37 @@ fn parse_auth_mode_env(value: Option<&str>) -> api::AuthMode {
     }
 }
 
+fn validate_jwt_secret(mode: api::AuthMode, secret: Option<&str>) -> Result<(), ConfigError> {
+    if mode == api::AuthMode::Anonymous {
+        return Ok(());
+    }
+    match secret {
+        Some(value) if value.len() >= 32 => Ok(()),
+        Some(_) => Err(ConfigError(
+            "JWT_SECRET must contain at least 32 characters when AUTH_MODE enables JWTs".into(),
+        )),
+        None => Err(ConfigError(
+            "JWT_SECRET is required when AUTH_MODE enables JWTs".into(),
+        )),
+    }
+}
+
+fn parse_port_env(value: Option<&str>) -> Result<u16, ConfigError> {
+    match value {
+        None => Ok(8080),
+        Some(raw) => raw
+            .trim()
+            .parse::<u16>()
+            .ok()
+            .filter(|port| *port > 0)
+            .ok_or_else(|| {
+                ConfigError(format!(
+                    "PORT must be an integer between 1 and 65535, got {raw:?}"
+                ))
+            }),
+    }
+}
+
 fn parse_allowed_origins(raw: &str) -> Vec<String> {
     raw.split(',')
         .map(str::trim)
@@ -356,7 +398,7 @@ fn parse_allowed_origins(raw: &str) -> Vec<String> {
         .collect()
 }
 
-async fn init_db() -> Result<sqlx::SqlitePool, sqlx::Error> {
+async fn init_db() -> Result<sqlx::SqlitePool, Box<dyn std::error::Error + Send + Sync>> {
     let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:./data/ctf_maze.db".into());
 
     // If the DB path points to a file inside a folder (like `./data/ctf_maze.db`),
@@ -371,10 +413,10 @@ async fn init_db() -> Result<sqlx::SqlitePool, sqlx::Error> {
         let db_path = Path::new(path_part);
 
         if let Some(parent) = db_path.parent() {
-            fs::create_dir_all(parent).map_err(sqlx::Error::Io)?;
+            fs::create_dir_all(parent)?;
         }
         if !db_path.exists() {
-            fs::File::create(db_path).map_err(sqlx::Error::Io)?;
+            fs::File::create(db_path)?;
         }
     }
 
@@ -384,7 +426,8 @@ async fn init_db() -> Result<sqlx::SqlitePool, sqlx::Error> {
         .await?;
 
     // Apply migrations on startup so tables exist before we store anything.
-    sqlx::migrate!("./migrations").run(&pool).await?;
+    let migrator = sqlx::migrate::Migrator::new(Path::new("./migrations")).await?;
+    migrator.run(&pool).await?;
 
     Ok(pool)
 }
@@ -393,7 +436,8 @@ async fn init_db() -> Result<sqlx::SqlitePool, sqlx::Error> {
 mod tests {
     use super::{
         parse_allowed_origins, parse_allowed_origins_env, parse_auth_mode_env, parse_bool_env,
-        parse_u32_env, parse_u64_env, AllowedOriginsSetting, RateLimitConfig,
+        parse_port_env, parse_u32_env, parse_u64_env, validate_jwt_secret, AllowedOriginsSetting,
+        RateLimitConfig,
     };
     use crate::api::AuthMode;
 
@@ -507,5 +551,22 @@ mod tests {
             parse_auth_mode_env(Some("optional_jwt")),
             AuthMode::OptionalJwt
         );
+    }
+
+    #[test]
+    fn jwt_modes_require_a_strong_configured_secret() {
+        assert!(validate_jwt_secret(AuthMode::Anonymous, None).is_ok());
+        assert!(validate_jwt_secret(AuthMode::Jwt, None).is_err());
+        assert!(validate_jwt_secret(AuthMode::OptionalJwt, Some("too-short")).is_err());
+        assert!(validate_jwt_secret(AuthMode::Jwt, Some(&"x".repeat(32))).is_ok());
+    }
+
+    #[test]
+    fn port_parser_rejects_invalid_values() {
+        assert_eq!(parse_port_env(None).expect("default port"), 8080);
+        assert_eq!(parse_port_env(Some("3000")).expect("valid port"), 3000);
+        assert!(parse_port_env(Some("0")).is_err());
+        assert!(parse_port_env(Some("70000")).is_err());
+        assert!(parse_port_env(Some("abc")).is_err());
     }
 }

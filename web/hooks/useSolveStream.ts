@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useReducer } from 'react';
 import { checkAndAward } from '@/lib/achievements';
 import { createSolveStreamUrl } from '@/lib/ws';
+import { publicEnv } from '@/lib/env';
 
 export type StreamStatus = 'idle' | 'connecting' | 'active' | 'finished' | 'error';
 
@@ -27,31 +28,63 @@ export interface UseSolveStreamResult {
   error: string | null;
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+interface StreamState extends UseSolveStreamResult {
+  runId: string | null;
+}
 
-function normalizeCell(c: unknown): [number, number] {
-  if (Array.isArray(c) && c.length >= 2) {
-    return [Number(c[0]), Number(c[1])];
+type StreamAction =
+  | { type: 'connected'; runId: string }
+  | { type: 'frame'; runId: string; frame: SolveFrame }
+  | { type: 'finished'; runId: string; path: [number, number][]; stats: SolveStats | null }
+  | { type: 'error'; runId: string; message: string };
+
+const IDLE_STATE: StreamState = {
+  runId: null,
+  status: 'idle',
+  frames: [],
+  path: [],
+  stats: null,
+  error: null,
+};
+
+function reducer(state: StreamState, action: StreamAction): StreamState {
+  if (state.runId !== action.runId && action.type !== 'connected') {
+    return state;
+  }
+  switch (action.type) {
+    case 'connected':
+      return { ...IDLE_STATE, runId: action.runId, status: 'active' };
+    case 'frame':
+      return { ...state, frames: [...state.frames, action.frame] };
+    case 'finished':
+      return { ...state, status: 'finished', path: action.path, stats: action.stats, error: null };
+    case 'error':
+      return { ...state, status: 'error', error: action.message };
+  }
+}
+
+function normalizeCell(cell: unknown): [number, number] {
+  if (Array.isArray(cell) && cell.length >= 2) {
+    return [Number(cell[0]), Number(cell[1])];
   }
   return [0, 0];
 }
 
 function normalizeFrame(data: unknown): SolveFrame {
-  const d = data as Record<string, unknown>;
-  const frontierRaw = Array.isArray(d.frontier) ? d.frontier : [];
-  const visitedRaw = Array.isArray(d.visited) ? d.visited : [];
-  const frontier = frontierRaw.map((c) => normalizeCell(c));
-  const visited = visitedRaw.map((c) => normalizeCell(c));
-  const currentRaw = d.current;
-  const current =
-    currentRaw !== undefined && currentRaw !== null
-      ? normalizeCell(currentRaw)
-      : undefined;
+  const value = data as Record<string, unknown>;
+  const frontier = Array.isArray(value.frontier) ? value.frontier.map(normalizeCell) : [];
+  const visited = Array.isArray(value.visited) ? value.visited.map(normalizeCell) : [];
+  const current = value.current == null ? undefined : normalizeCell(value.current);
+  return { t: Number(value.t ?? 0), frontier, visited, current };
+}
+
+function normalizeStats(data: unknown): SolveStats | null {
+  if (!data || typeof data !== 'object') return null;
+  const value = data as Record<string, unknown>;
   return {
-    t: Number(d.t ?? 0),
-    frontier,
-    visited,
-    current,
+    visited: Number(value.visited ?? 0),
+    cost: Number(value.cost ?? 0),
+    ms: Number(value.ms ?? 0),
   };
 }
 
@@ -59,62 +92,27 @@ export function useSolveStream(
   runId: string | null,
   solver: string | null,
 ): UseSolveStreamResult {
-  const [status, setStatus] = useState<StreamStatus>('idle');
-  const [frames, setFrames] = useState<SolveFrame[]>([]);
-  const [path, setPath] = useState<[number, number][]>([]);
-  const [stats, setStats] = useState<SolveStats | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const terminalRef = useRef(false);
+  const [state, dispatch] = useReducer(reducer, IDLE_STATE);
 
   useEffect(() => {
-    terminalRef.current = false;
-    if (!runId) {
-      setStatus('idle');
-      setFrames([]);
-      setPath([]);
-      setStats(null);
-      setError(null);
-      return;
-    }
+    if (!runId) return;
+    const ws = new WebSocket(createSolveStreamUrl(runId));
 
-    const wsUrl = createSolveStreamUrl(runId);
-    setStatus('connecting');
-    setFrames([]);
-    setPath([]);
-    setStats(null);
-    setError(null);
-
-    const ws = new WebSocket(wsUrl);
-    const finalizeFromReplay = async () => {
+    const finishFromReplay = async () => {
       for (let attempt = 0; attempt < 20; attempt += 1) {
         try {
-          const replayRes = await fetch(`${API}/api/replay/${encodeURIComponent(runId)}`);
-          if (!replayRes.ok) {
+          const response = await fetch(
+            `${publicEnv.NEXT_PUBLIC_API_URL}/api/replay/${encodeURIComponent(runId)}`,
+          );
+          if (!response.ok) {
             await new Promise((resolve) => setTimeout(resolve, 250));
             continue;
           }
-          const replay = (await replayRes.json()) as {
-            path?: unknown;
-            stats?: Record<string, unknown>;
-          };
-          const replayPathRaw = Array.isArray(replay.path) ? replay.path : [];
-          setPath(replayPathRaw.map((c) => normalizeCell(c)));
-          const replayStats = replay.stats;
-          if (replayStats) {
-            const visited = Number(replayStats.visited ?? 0);
-            const cost = Number(replayStats.cost ?? 0);
-            const ms = Number(replayStats.ms ?? 0);
-            setStats({ visited, cost, ms });
-            checkAndAward({
-              visited,
-              cost,
-              solver: solver ?? '',
-            });
-          } else {
-            setStats(null);
-          }
-          setStatus('finished');
-          terminalRef.current = true;
+          const replay = (await response.json()) as Record<string, unknown>;
+          const path = Array.isArray(replay.path) ? replay.path.map(normalizeCell) : [];
+          const stats = normalizeStats(replay.stats);
+          if (stats) checkAndAward({ ...stats, solver: solver ?? '' });
+          dispatch({ type: 'finished', runId, path, stats });
           return true;
         } catch {
           await new Promise((resolve) => setTimeout(resolve, 250));
@@ -123,83 +121,51 @@ export function useSolveStream(
       return false;
     };
 
-    ws.onopen = () => setStatus('active');
+    ws.onopen = () => dispatch({ type: 'connected', runId });
     ws.onerror = () => {
-      setStatus('error');
-      setError('WebSocket error');
-      terminalRef.current = true;
-    };
-    ws.onclose = () => {
-      if (!terminalRef.current) {
-        setStatus('idle');
-      }
+      dispatch({ type: 'error', runId, message: 'WebSocket error' });
     };
     ws.onmessage = (event) => {
       try {
-        const msg = JSON.parse(event.data) as {
-          type?: string;
-          data?: unknown;
-          path?: unknown;
-          stats?: unknown;
-          message?: string;
-          error?: string;
-        };
-        if (msg.type === 'connected') {
+        const message = JSON.parse(event.data) as Record<string, unknown>;
+        if (message.type === 'frame') {
+          dispatch({ type: 'frame', runId, frame: normalizeFrame(message.data) });
           return;
         }
-        if (msg.type === 'frame' && msg.data !== undefined) {
-          setFrames((prev) => [...prev, normalizeFrame(msg.data)]);
-        } else if (msg.type === 'finished') {
-          const pathRaw = Array.isArray(msg.path) ? msg.path : [];
-          setPath(pathRaw.map((c) => normalizeCell(c)));
-          const s = msg.stats as Record<string, unknown> | undefined;
-          if (s) {
-            const visited = Number(s.visited ?? 0);
-            const cost = Number(s.cost ?? 0);
-            const ms = Number(s.ms ?? 0);
-            setStats({ visited, cost, ms });
-            checkAndAward({
-              visited,
-              cost,
-              solver: solver ?? '',
-            });
-          } else {
-            setStats(null);
-          }
-          setStatus('finished');
-          terminalRef.current = true;
-        } else if (msg.type === 'error') {
-          const errText =
-            typeof msg.message === 'string'
-              ? msg.message
-              : typeof msg.error === 'string'
-                ? msg.error
-                : 'Unknown error';
-          if (errText.includes('unknown or completed runId')) {
-            void finalizeFromReplay().then((ok) => {
-              if (!ok) {
-                setError(errText);
-                setStatus('error');
-                terminalRef.current = true;
+        if (message.type === 'finished') {
+          const path = Array.isArray(message.path) ? message.path.map(normalizeCell) : [];
+          const stats = normalizeStats(message.stats);
+          if (stats) checkAndAward({ ...stats, solver: solver ?? '' });
+          dispatch({ type: 'finished', runId, path, stats });
+          return;
+        }
+        if (message.type === 'error') {
+          const text = typeof message.message === 'string'
+            ? message.message
+            : typeof message.error === 'string'
+              ? message.error
+              : 'Unknown error';
+          if (text.includes('unknown or completed runId')) {
+            void finishFromReplay().then((finished) => {
+              if (!finished) {
+                dispatch({ type: 'error', runId, message: text });
               }
             });
           } else {
-            setError(errText);
-            setStatus('error');
-            terminalRef.current = true;
+            dispatch({ type: 'error', runId, message: text });
           }
         }
       } catch {
-        setError('Invalid message');
-        setStatus('error');
-        terminalRef.current = true;
+        dispatch({ type: 'error', runId, message: 'Invalid message' });
       }
     };
 
-    return () => {
-      ws.close();
-    };
+    return () => ws.close();
   }, [runId, solver]);
 
-  return { status, frames, path, stats, error };
+  if (!runId) return IDLE_STATE;
+  if (state.runId !== runId) {
+    return { status: 'connecting', frames: [], path: [], stats: null, error: null };
+  }
+  return state;
 }

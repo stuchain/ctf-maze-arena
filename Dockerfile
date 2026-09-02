@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1
 
-FROM rust:1.86-bookworm AS builder
+FROM rust:1.94-bookworm AS builder
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
+COPY build.rs ./
 COPY src ./src
 COPY migrations ./migrations
 COPY benches ./benches

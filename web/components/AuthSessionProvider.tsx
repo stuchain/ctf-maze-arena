@@ -1,7 +1,16 @@
-"use client";
+'use client';
 
-import { SessionProvider } from "next-auth/react";
+import { SessionProvider } from 'next-auth/react';
+import { publicEnv } from '@/lib/env';
 
 export function AuthSessionProvider({ children }: { children: React.ReactNode }) {
-  return <SessionProvider>{children}</SessionProvider>;
+  const authDisabled = publicEnv.NEXT_PUBLIC_AUTH_MODE === 'anonymous';
+  return (
+    <SessionProvider
+      session={authDisabled ? null : undefined}
+      refetchOnWindowFocus={!authDisabled}
+    >
+      {children}
+    </SessionProvider>
+  );
 }

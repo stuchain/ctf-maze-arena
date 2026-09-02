@@ -4,8 +4,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { MazeGrid } from '@/components/MazeGrid';
 import { backendMazeToMazeData } from '@/lib/maze';
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+import { publicEnv } from '@/lib/env';
 
 interface ReplayPayload {
   mazeId: string;
@@ -23,7 +22,11 @@ interface ReplayPayload {
 
 export default function ReplayPage() {
   const params = useParams();
-  const runId = params.runId as string;
+  const runId = String(params.runId);
+  return <ReplayView key={runId} runId={runId} />;
+}
+
+function ReplayView({ runId }: { runId: string }) {
   const [replay, setReplay] = useState<ReplayPayload | null>(null);
   const [mazeJson, setMazeJson] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,110 +35,77 @@ export default function ReplayPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    setReplay(null);
-    setMazeJson(null);
-    setError(null);
-    setFrameIndex(0);
-    setPlaying(false);
-
-    fetch(`${API}/api/replay/${encodeURIComponent(runId)}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Not found'))))
+    fetch(`${publicEnv.NEXT_PUBLIC_API_URL}/api/replay/${encodeURIComponent(runId)}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Replay not found')))
       .then((data: ReplayPayload) => {
         setReplay(data);
         return fetch(
-          `${API}/api/maze/${encodeURIComponent(data.mazeId)}`,
-        ).then((mr) =>
-          mr.ok ? mr.json() : Promise.reject(new Error('Maze not found')),
-        );
+          `${publicEnv.NEXT_PUBLIC_API_URL}/api/maze/${encodeURIComponent(data.mazeId)}`,
+        ).then((response) => response.ok
+          ? response.json()
+          : Promise.reject(new Error('Maze not found')));
       })
       .then(setMazeJson)
-      .catch((e: Error) => setError(e.message));
+      .catch((cause: Error) => setError(cause.message));
   }, [runId]);
 
   useEffect(() => {
-    if (!playing || !replay?.frames?.length) return;
-    const idx = frameIndex;
-    if (idx >= replay.frames.length - 1) {
-      setPlaying(false);
-      return;
-    }
-    const t = setTimeout(() => setFrameIndex(idx + 1), 100);
-    return () => clearTimeout(t);
-  }, [playing, frameIndex, replay?.frames]);
+    if (!playing || !replay?.frames.length || frameIndex >= replay.frames.length - 1) return;
+    const timer = setTimeout(() => setFrameIndex((index) => index + 1), 100);
+    return () => clearTimeout(timer);
+  }, [playing, frameIndex, replay?.frames.length]);
 
   useEffect(() => {
     if (!copied) return;
-    const t = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
   }, [copied]);
 
   const handleShare = async () => {
-    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/replay/${runId}`;
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(`${window.location.origin}/replay/${runId}`);
     setCopied(true);
   };
 
-  if (error) return <div>Error: {error}</div>;
-  if (!replay || !mazeJson) return <div>Loading...</div>;
+  if (error) return <main id="main-content" className="p-4" role="alert">{error}</main>;
+  if (!replay || !mazeJson) return <main id="main-content" className="p-4">Loading replay…</main>;
 
   const maze = backendMazeToMazeData(mazeJson);
   const frame = replay.frames[frameIndex];
-  const lastFrame =
-    !replay.frames.length ||
-    frameIndex >= replay.frames.length - 1;
-  const showPath = lastFrame ? replay.path : undefined;
+  const lastFrame = !replay.frames.length || frameIndex >= replay.frames.length - 1;
+  const isPlaying = playing && !lastFrame;
 
   return (
-    <div className="p-4">
-      <div className="flex flex-wrap items-center gap-3 mb-2">
-        <h1 className="text-xl font-semibold">Replay: {runId}</h1>
-        <button
-          type="button"
-          className="rounded border border-zinc-400 px-3 py-1 text-sm"
-          onClick={() => void handleShare()}
-        >
-          Share
+    <main id="main-content" className="p-4">
+      <div className="mb-2 flex flex-wrap items-center gap-3">
+        <h1 className="text-xl font-semibold">Solve replay</h1>
+        <button type="button" className="rounded border border-zinc-400 px-3 py-1 text-sm" onClick={() => void handleShare()}>
+          Share replay
         </button>
-        {copied ? (
-          <span className="text-sm text-green-600">Link copied!</span>
-        ) : null}
+        {copied ? <span className="text-sm text-green-600" role="status">Link copied</span> : null}
       </div>
-      <p>
-        Solver: {replay.solver} | Visited: {replay.stats?.visited} | Cost:{' '}
-        {replay.stats?.cost}
-      </p>
+      <p>Solver: {replay.solver} | Visited: {replay.stats.visited} | Cost: {replay.stats.cost}</p>
 
-      <div className="flex gap-2 mb-4">
+      <div className="mb-4 flex gap-2">
         <button
           type="button"
-          className="rounded bg-zinc-800 px-3 py-1 text-white text-sm disabled:opacity-50"
+          className="rounded bg-zinc-800 px-3 py-1 text-sm text-white disabled:opacity-50"
           onClick={() => setPlaying(true)}
-          disabled={
-            playing || !replay.frames.length || frameIndex >= replay.frames.length - 1
-          }
+          disabled={isPlaying || lastFrame}
         >
           Play
         </button>
-        <button
-          type="button"
-          className="rounded bg-zinc-500 px-3 py-1 text-white text-sm"
-          onClick={() => setPlaying(false)}
-        >
+        <button type="button" className="rounded bg-zinc-500 px-3 py-1 text-sm text-white" onClick={() => setPlaying(false)}>
           Pause
         </button>
         <button
           type="button"
           className="rounded border border-zinc-400 px-3 py-1 text-sm"
-          onClick={() => {
-            setFrameIndex(0);
-            setPlaying(false);
-          }}
+          onClick={() => { setFrameIndex(0); setPlaying(false); }}
         >
           Reset
         </button>
-        <span className="text-sm text-zinc-600 self-center">
-          Frame {replay.frames.length ? frameIndex + 1 : 0} /{' '}
-          {replay.frames.length}
+        <span className="self-center text-sm text-zinc-600">
+          Frame {replay.frames.length ? frameIndex + 1 : 0} / {replay.frames.length}
         </span>
       </div>
 
@@ -144,8 +114,8 @@ export default function ReplayPage() {
         frontier={frame?.frontier}
         visited={frame?.visited}
         current={frame?.current}
-        path={showPath}
+        path={lastFrame ? replay.path : undefined}
       />
-    </div>
+    </main>
   );
 }

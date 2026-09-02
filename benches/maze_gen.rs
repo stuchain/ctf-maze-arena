@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use ctf_maze_arena::maze::gen::{generate, GeneratorAlgo};
+use std::hint::black_box;
 
 fn bench_kruskal_10(c: &mut Criterion) {
     c.bench_function("kruskal_10x10", |b| {
