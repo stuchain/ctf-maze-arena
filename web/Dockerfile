@@ -2,7 +2,7 @@
 # NEXT_PUBLIC_* is inlined at build time. For docker compose on your laptop, the browser must
 # reach the API on a host URL (e.g. http://localhost:8080), not only the internal service name.
 
-FROM node:20-bookworm-slim AS base
+FROM node:26-bookworm-slim AS base
 WORKDIR /app
 
 FROM base AS deps
