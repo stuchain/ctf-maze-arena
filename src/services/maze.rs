@@ -44,7 +44,11 @@ pub async fn generate_and_store(
 }
 
 pub async fn get(pool: &PgPool, id: MazeId) -> Result<Maze, ServiceError> {
-    store::get_maze(pool, id)
+    get_with_seed(pool, id).await.map(|(maze, _seed)| maze)
+}
+
+pub async fn get_with_seed(pool: &PgPool, id: MazeId) -> Result<(Maze, u64), ServiceError> {
+    store::get_maze_with_seed(pool, id)
         .await?
         .ok_or(ServiceError::NotFound)
 }

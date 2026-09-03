@@ -113,15 +113,27 @@ pub async fn store_maze(
 }
 
 pub async fn get_maze(pool: &PgPool, id: MazeId) -> Result<Option<Maze>, StoreError> {
-    let payload =
-        sqlx::query_scalar::<_, serde_json::Value>("SELECT payload FROM mazes WHERE id = $1")
-            .bind(id)
-            .fetch_optional(pool)
-            .await?;
-    payload
-        .map(serde_json::from_value)
-        .transpose()
-        .map_err(Into::into)
+    Ok(get_maze_with_seed(pool, id)
+        .await?
+        .map(|(maze, _seed)| maze))
+}
+
+pub async fn get_maze_with_seed(
+    pool: &PgPool,
+    id: MazeId,
+) -> Result<Option<(Maze, u64)>, StoreError> {
+    let row = sqlx::query_as::<_, (serde_json::Value, i64)>(
+        "SELECT payload, seed FROM mazes WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+    row.map(|(payload, seed)| {
+        let maze = serde_json::from_value(payload)?;
+        let seed = u64::try_from(seed).map_err(|_| StoreError::NumericOverflow)?;
+        Ok((maze, seed))
+    })
+    .transpose()
 }
 
 async fn upsert_user(

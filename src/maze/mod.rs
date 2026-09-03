@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{de::Error as _, ser::SerializeSeq, Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 pub mod gen;
@@ -154,13 +154,77 @@ pub struct Maze {
     pub start: Cell,
     pub goal: Cell,
     /// cell -> key id (if any)
+    #[serde(
+        serialize_with = "serialize_keys",
+        deserialize_with = "deserialize_keys"
+    )]
     pub keys: HashMap<Cell, KeyId>,
     /// edge -> required key id
+    #[serde(
+        serialize_with = "serialize_doors",
+        deserialize_with = "deserialize_doors"
+    )]
     pub doors: HashMap<Edge, KeyId>,
 }
 
 /// Key id: 0..=31 for u32 bitmask.
 pub type KeyId = u8;
+
+fn serialize_keys<S>(keys: &HashMap<Cell, KeyId>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let mut entries = keys.iter().collect::<Vec<_>>();
+    entries.sort_by_key(|(cell, _)| (cell.y, cell.x));
+    let mut sequence = serializer.serialize_seq(Some(entries.len()))?;
+    for (cell, key_id) in entries {
+        sequence.serialize_element(&(cell, key_id))?;
+    }
+    sequence.end()
+}
+
+fn serialize_doors<S>(doors: &HashMap<Edge, KeyId>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let mut entries = doors.iter().collect::<Vec<_>>();
+    entries.sort_by_key(|(edge, _)| (edge.0.y, edge.0.x, edge.1.y, edge.1.x));
+    let mut sequence = serializer.serialize_seq(Some(entries.len()))?;
+    for (edge, key_id) in entries {
+        sequence.serialize_element(&(edge, key_id))?;
+    }
+    sequence.end()
+}
+
+fn deserialize_keys<'de, D>(deserializer: D) -> Result<HashMap<Cell, KeyId>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    decode_keys(value).map_err(D::Error::custom)
+}
+
+fn deserialize_doors<'de, D>(deserializer: D) -> Result<HashMap<Edge, KeyId>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    decode_doors(value).map_err(D::Error::custom)
+}
+
+fn decode_keys(value: serde_json::Value) -> Result<HashMap<Cell, KeyId>, serde_json::Error> {
+    if value.as_object().is_some_and(serde_json::Map::is_empty) {
+        return Ok(HashMap::new());
+    }
+    serde_json::from_value::<Vec<(Cell, KeyId)>>(value).map(|entries| entries.into_iter().collect())
+}
+
+fn decode_doors(value: serde_json::Value) -> Result<HashMap<Edge, KeyId>, serde_json::Error> {
+    if value.as_object().is_some_and(serde_json::Map::is_empty) {
+        return Ok(HashMap::new());
+    }
+    serde_json::from_value::<Vec<(Edge, KeyId)>>(value).map(|entries| entries.into_iter().collect())
+}
 
 impl Maze {
     pub fn new(width: usize, height: usize) -> Self {
@@ -271,13 +335,13 @@ impl Maze {
         let keys: HashMap<Cell, KeyId> = if keys_json.trim().is_empty() {
             HashMap::new()
         } else {
-            serde_json::from_str(keys_json)?
+            decode_keys(serde_json::from_str(keys_json)?)?
         };
 
         let doors: HashMap<Edge, KeyId> = if doors_json.trim().is_empty() {
             HashMap::new()
         } else {
-            serde_json::from_str(doors_json)?
+            decode_doors(serde_json::from_str(doors_json)?)?
         };
 
         let mut maze = Maze::new(width, height);
@@ -365,6 +429,41 @@ mod tests {
         maze.doors.insert(Edge::normalized(a, b), 2);
         assert!(!maze.can_move(a, b, 0));
         assert!(maze.can_move(a, b, 1 << 2));
+    }
+
+    #[test]
+    fn maze_json_roundtrip_preserves_key_and_door_markers() {
+        let mut maze = Maze::new(3, 3);
+        let key_cell = Cell::new(1, 1);
+        let door = Edge::normalized(Cell::new(1, 1), Cell::new(2, 1));
+        maze.keys.insert(key_cell, 3);
+        maze.doors.insert(door.clone(), 3);
+
+        let value = serde_json::to_value(&maze).expect("maze serializes");
+        assert_eq!(value["keys"], serde_json::json!([[{"x": 1, "y": 1}, 3]]));
+        assert_eq!(
+            value["doors"],
+            serde_json::json!([[[{"x": 1, "y": 1}, {"x": 2, "y": 1}], 3]])
+        );
+
+        let parsed: Maze = serde_json::from_value(value).expect("maze deserializes");
+        assert_eq!(parsed.has_key_at(key_cell), Some(3));
+        assert_eq!(parsed.door_requires(door.0, door.1), Some(3));
+    }
+
+    #[test]
+    fn maze_json_accepts_legacy_empty_marker_objects() {
+        let value = serde_json::json!({
+            "grid": { "width": 2, "height": 2 },
+            "walls": { "inner": [] },
+            "start": { "x": 0, "y": 0 },
+            "goal": { "x": 1, "y": 1 },
+            "keys": {},
+            "doors": {}
+        });
+        let parsed: Maze = serde_json::from_value(value).expect("legacy maze deserializes");
+        assert!(parsed.keys.is_empty());
+        assert!(parsed.doors.is_empty());
     }
 
     #[test]

@@ -7,10 +7,12 @@ import { AppHeader } from '@/components/AppHeader';
 import { GenerateForm, type GenerateFormParams } from '@/components/GenerateForm';
 import { Leaderboard, type LeaderboardEntry } from '@/components/Leaderboard';
 import { MazeGrid, type MazeData } from '@/components/MazeGrid';
+import { PlaybackControls } from '@/components/PlaybackControls';
 import { SolverPicker } from '@/components/SolverPicker';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Badge, Button, Field, Notice, Panel, PanelHeader } from '@/components/ui/Primitives';
 import { useSolveStream, type StreamStatus } from '@/hooks/useSolveStream';
+import { usePlaybackTimeline } from '@/hooks/usePlaybackTimeline';
 import {
   cancelResponseSchema,
   dailyResponseSchema,
@@ -68,6 +70,13 @@ function formatChallengeDate(value: string) {
     .format(new Date(`${value}T00:00:00Z`));
 }
 
+const SOLVER_GUARANTEES: Record<string, string> = {
+  BFS: 'Shortest path in an unweighted maze',
+  DFS: 'Complete search; path is not guaranteed shortest',
+  ASTAR: 'Shortest path with an admissible heuristic',
+  DP_KEYS: 'Complete key-aware state search',
+};
+
 export default function Home() {
   const { status: authStatus } = useSession();
   const [solver, setSolver] = useState('ASTAR');
@@ -97,7 +106,8 @@ export default function Home() {
     status: solveStreamStatus, frames, path: solvePath, stats,
     error: solveStreamError, sequence: solveSequence,
   } = useSolveStream(runId, solver);
-  const frame = frames[frames.length - 1];
+  const playback = usePlaybackTimeline(frames.length, 'live', runId);
+  const frame = frames[playback.displayIndex];
   const isActive = ACTIVE_STATUSES.includes(solveStreamStatus);
 
   const authHeaders = async (): Promise<Record<string, string>> => {
@@ -235,10 +245,20 @@ export default function Home() {
           <div className="stage-shell">
             <div className="stage-grid" aria-hidden="true" />
             <MazeGrid
+              key={mazeId ?? 'empty'}
               maze={maze} frontier={frame?.frontier} visited={frame?.visited}
-              current={frame?.current} path={solveStreamStatus === 'completed' ? solvePath : undefined}
+              current={frame?.current} path={solveStreamStatus === 'completed' && playback.atEnd ? solvePath : undefined}
             />
           </div>
+          {frames.length ? (
+            <PlaybackControls
+              mode="live" totalFrames={frames.length} currentIndex={playback.displayIndex}
+              playing={playback.playing} followLive={playback.followLive} speed={playback.speed}
+              onPlay={playback.play} onPause={playback.pause} onReset={playback.reset}
+              onPrevious={playback.previous} onNext={playback.next} onGoLive={playback.goLive}
+              onIndexChange={playback.setIndex} onSpeedChange={playback.setSpeed}
+            />
+          ) : null}
           <div className="arena-toolbar">
             <MazeLegend />
             <div className="arena-actions">
@@ -270,6 +290,7 @@ export default function Home() {
               <Metric label="Runtime" value={stats ? `${stats.ms} ms` : '—'} />
               <Metric label="Solver" value={solver.replace('_', ' ')} />
             </div>
+            <p className="solver-guarantee"><strong>Guarantee</strong>{SOLVER_GUARANTEES[solver] ?? 'Solver-specific result'}</p>
           </div>
           {solveStreamStatus === 'completed' && authStatus === 'authenticated' ? (
             <Button className="button--full" variant="secondary" onClick={() => void handleSubmitScore()} loading={submissionStatus === 'Submitting score…'}>

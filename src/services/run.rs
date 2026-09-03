@@ -99,6 +99,7 @@ pub struct StartRun<'a> {
     pub actor: String,
     pub maze_id: uuid::Uuid,
     pub maze: Maze,
+    pub maze_seed: u64,
     pub solver_name: String,
     pub solver: Arc<dyn Solver>,
     pub request_id: &'a str,
@@ -140,6 +141,7 @@ pub async fn start(input: StartRun<'_>) -> Result<RunId, ServiceError> {
     let solver_name = input.solver_name;
     let solver = input.solver;
     let maze = input.maze;
+    let maze_seed = input.maze_seed;
     tokio::spawn(async move {
         let _lease = lease;
         let permit = match concurrency.acquire_owned().await {
@@ -201,8 +203,13 @@ pub async fn start(input: StartRun<'_>) -> Result<RunId, ServiceError> {
                     return;
                 }
                 let stats = result.stats.clone();
-                let replay =
-                    replay::build_replay(maze_id.to_string(), &solver_name, 0, result, events);
+                let replay = replay::build_replay(
+                    maze_id.to_string(),
+                    &solver_name,
+                    maze_seed,
+                    result,
+                    events,
+                );
                 if let Err(error) = store::complete_run(&pool, run_id, &stats, &replay).await {
                     tracing::error!(%run_id, %error, "failed to persist completed run");
                     persist_failure(&pool, run_id, "persistence_failed").await;

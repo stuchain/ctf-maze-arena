@@ -27,6 +27,22 @@ export interface UseSolveStreamResult {
   sequence: number;
 }
 
+export const LIVE_FRAME_CAPACITY = 512;
+
+interface ClientStreamState extends StreamState {
+  frames: VisualState[];
+}
+
+const idleClientState: ClientStreamState = { ...idleStreamState, frames: [] };
+
+export function appendBoundedFrame(frames: VisualState[], frame: VisualState, capacity = LIVE_FRAME_CAPACITY) {
+  if (frames.at(-1)?.step === frame.step) return frames;
+  const boundedCapacity = Math.max(1, capacity);
+  return frames.length >= boundedCapacity
+    ? [...frames.slice(frames.length - boundedCapacity + 1), frame]
+    : [...frames, frame];
+}
+
 type Action =
   | { type: 'reset'; runId: string }
   | { type: 'status'; status: StreamStatus }
@@ -35,11 +51,16 @@ type Action =
   | { type: 'cancelled' }
   | { type: 'failure'; message: string };
 
-function reducer(state: StreamState, action: Action): StreamState {
+function reducer(state: ClientStreamState, action: Action): ClientStreamState {
   switch (action.type) {
-    case 'reset': return connectingState(action.runId);
+    case 'reset': return { ...connectingState(action.runId), frames: [] };
     case 'status': return { ...state, status: action.status };
-    case 'message': return reduceServerMessage(state, action.message);
+    case 'message': {
+      const next = reduceServerMessage(state, action.message);
+      if (!next.visual || next.visual.step === state.visual?.step) return { ...next, frames: state.frames };
+      const frames = appendBoundedFrame(state.frames, next.visual);
+      return { ...next, frames };
+    }
     case 'replay': return { ...state, status: 'completed', path: action.path, stats: action.stats, error: null };
     case 'cancelled': return { ...state, status: 'cancelled', error: null };
     case 'failure': return { ...state, status: 'failed', error: action.message };
@@ -56,7 +77,7 @@ function normalizeStats(value: unknown): SolveStats | null {
 }
 
 export function useSolveStream(runId: string | null, solver: string | null): UseSolveStreamResult {
-  const [state, dispatch] = useReducer(reducer, idleStreamState);
+  const [state, dispatch] = useReducer(reducer, idleClientState);
   const sequence = useRef(0);
 
   useEffect(() => {
@@ -167,5 +188,5 @@ export function useSolveStream(runId: string | null, solver: string | null): Use
 
   if (!runId) return { status: 'idle', frames: [], path: [], stats: null, error: null, sequence: 0 };
   if (state.runId !== runId) return { status: 'connecting', frames: [], path: [], stats: null, error: null, sequence: 0 };
-  return { status: state.status, frames: state.visual ? [state.visual] : [], path: state.path, stats: state.stats, error: state.error, sequence: state.sequence };
+  return { status: state.status, frames: state.frames, path: state.path, stats: state.stats, error: state.error, sequence: state.sequence };
 }

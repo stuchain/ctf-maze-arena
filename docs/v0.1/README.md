@@ -40,5 +40,6 @@ Allowed statuses are `not-started`, `in-design`, `ready`, `in-progress`, `blocke
 - Phase 2 — Backend correctness and Postgres: `complete`
 - Phase 3 — Realtime solve engine: `complete`
 - Phase 4 — Design system and application shell: `complete`
-- Current phase: Phase 5 — Maze visualization and replay (`ready`)
+- Phase 5 — Maze visualization and replay: `complete`
+- Current phase: Phase 6 — Algorithm Race (`ready`)
 - Product implementation under this roadmap: active

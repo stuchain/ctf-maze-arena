@@ -101,7 +101,7 @@ pub(super) async fn solve(
 ) -> Result<(StatusCode, Json<SolveResponse>), ApiError> {
     let Json(request) = payload.map_err(|error| ApiError::invalid_json(error, &request_id))?;
     let maze_id = parse_uuid(&request.maze_id, "mazeId", &request_id)?;
-    let maze = maze::get(&state.db, maze_id)
+    let (maze, maze_seed) = maze::get_with_seed(&state.db, maze_id)
         .await
         .map_err(|error| ApiError::from_service(error, &request_id))?;
     let solver = state.solvers.get(&request.solver).cloned().ok_or_else(|| {
@@ -131,6 +131,7 @@ pub(super) async fn solve(
         actor,
         maze_id,
         maze,
+        maze_seed,
         solver_name: request.solver,
         solver,
         request_id: &request_id,

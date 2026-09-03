@@ -88,8 +88,9 @@ export function replayStates(events: unknown[]): VisualState[] {
     if (!raw || typeof raw !== 'object') continue;
     const event = raw as Record<string, unknown>;
     const message = { ...event, protocolVersion: PROTOCOL_VERSION, runId: 'replay' };
+    const previousVisual = state.visual;
     state = reduceServerMessage(state, message);
-    if (state.visual) states.push(state.visual);
+    if (state.visual && state.visual !== previousVisual) states.push(state.visual);
   }
   return states;
 }

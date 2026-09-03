@@ -1,6 +1,6 @@
 # Phase 5 — Maze visualization and replay
 
-**Status:** ready
+**Status:** complete
 
 **Depends on:** Phases 3 and 4
 
@@ -61,14 +61,14 @@ The graphic has a concise label and a detailed textual state summary, not thousa
 
 ## Work checklist
 
-- [ ] Define validated maze-view and replay-view models.
-- [ ] Correct shared-boundary and outer-wall geometry.
-- [ ] Implement indexed state and memoized static layers.
-- [ ] Build responsive stage, legend, markers, zoom/pan/fit/fullscreen.
-- [ ] Build unified live/replay playback state machine and controls.
-- [ ] Add textual summary, selected-cell inspection, shortcuts, and reduced-motion behavior.
-- [ ] Add share/copy feedback and polished replay loading/error metadata.
-- [ ] Benchmark SVG and document whether a Canvas hybrid is needed.
+- [x] Define validated maze-view and replay-view models.
+- [x] Correct shared-boundary and outer-wall geometry.
+- [x] Implement indexed state and memoized static layers.
+- [x] Build responsive stage, legend, markers, zoom/pan/fit/fullscreen.
+- [x] Build unified live/replay playback state machine and controls.
+- [x] Add textual summary, selected-cell inspection, shortcuts, and reduced-motion behavior.
+- [x] Add share/copy feedback and polished replay loading/error metadata.
+- [x] Benchmark SVG and document whether a Canvas hybrid is needed.
 
 ## Test strategy
 
@@ -87,20 +87,26 @@ The graphic has a concise label and a detailed textual state summary, not thousa
 
 ## Exit criteria
 
-- [ ] Known mazes render geometrically correct walls and markers.
-- [ ] Live and replay playback share consistent controls and state.
-- [ ] Target performance and memory evidence is recorded.
-- [ ] Keyboard, reduced-motion, zoom, and textual alternatives are verified.
-- [ ] Replay pages are polished, shareable, and resilient to missing data.
+- [x] Known mazes render geometrically correct walls and markers.
+- [x] Live and replay playback share consistent controls and state.
+- [x] Target performance and memory evidence is recorded.
+- [x] Keyboard, reduced-motion, zoom, and textual alternatives are verified.
+- [x] Replay pages are polished, shareable, and resilient to missing data.
 
 ## Verification record
 
 | Date | Change | Evidence |
 |---|---|---|
-| — | Not implemented | — |
+| 2026-09-03 | Maze/replay normalization, shared-boundary SVG geometry, indexed layers, controls, inspection, marker serialization, and replay seed fidelity | `cargo test --all-targets --all-features` — 68 unit tests plus all benchmark targets passed; `cargo clippy --all-targets --all-features -- -D warnings`; `npm run lint`; `npm run typecheck`; `npm run test:unit` — 21 passed; `npm run build` |
+| 2026-09-03 | PostgreSQL lifecycle regression | `TEST_DATABASE_URL=postgresql://…/ctf_maze_test cargo test --test postgres_integration -- --test-threads=1` — 2 passed against PostgreSQL 16 |
+| 2026-09-03 | Real-stack interaction, accessibility, geometry, replay, responsive, and streaming coverage | `npm run test:e2e -- --workers=1` — 14 passed against the Next.js app, Rust API, and PostgreSQL; targeted replay keyboard/share/seed test also passed after its final assertion update |
+| 2026-09-03 | Representative 50×50 SVG benchmark and visual inspection | 208 ms generate-to-visible, 10 SVG descendant nodes, 37,635 wall-path bytes, 19.3 MB reported JS heap; full-page screenshot inspected at 1280 px; enforced budgets are under 5,000 ms and 30 SVG nodes |
 
 ## Decision and deviation log
 
 | Date | Decision or deviation | Consequence |
 |---|---|---|
-| — | None | — |
+| 2026-09-03 | Retain optimized SVG instead of introducing a Canvas hybrid. | A 50×50 maze stays well inside the render and DOM budgets while preserving crisp scaling, semantics, and simple deterministic tests. Revisit only if Phase 6 multi-arena measurements miss their budget. |
+| 2026-09-03 | Represent keys and doors as sorted entry arrays at the Rust/JSON boundary while accepting legacy empty objects. | Non-empty marker maps now serialize reliably, produce deterministic payloads, and match the validated frontend model without invalidating existing stored mazes. |
+| 2026-09-03 | Keep at most 512 live visual frames and render static walls as one memoized path. | Live memory is bounded and progress updates do not rebuild thousands of unchanged SVG elements. |
+| 2026-09-03 | Read the persisted maze seed when starting a run. | Replay metadata now reflects the actual deterministic maze seed instead of the former placeholder value `0`. |

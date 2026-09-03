@@ -1,6 +1,6 @@
 # Phase 6 — Algorithm Race
 
-**Status:** not-started
+**Status:** ready
 
 **Depends on:** Phase 5
 

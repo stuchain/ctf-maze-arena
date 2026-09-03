@@ -4,7 +4,7 @@
 
 **Last updated:** 2026-09-03
 
-**Current phase:** Phase 5 is ready
+**Current phase:** Phase 6 is ready
 **Target:** a polished, public, completely free portfolio experience
 
 ## 1. Vision
@@ -54,8 +54,8 @@ Free tiers provide no production SLA. Koyeb may scale the API to zero after one 
 | 2. Backend and Postgres | complete | Correct lifecycle, durable schema, trustworthy leaderboard | 1 |
 | 3. Realtime engine | complete | Incremental, resumable, bounded solve streaming | 2 |
 | 4. Design system | complete | Premium responsive shell and reusable UI primitives | 1 |
-| 5. Maze visualization | ready | Correct, fast, accessible maze and replay controls | 3, 4 |
-| 6. Algorithm Race | not-started | Signature comparison and education experience | 5 |
+| 5. Maze visualization | complete | Correct, fast, accessible maze and replay controls | 3, 4 |
+| 6. Algorithm Race | ready | Signature comparison and education experience | 5 |
 | 7. Identity and community | not-started | GitHub-backed profiles, scores, challenges, achievements | 2, 4, 6 |
 | 8. Free deployment | not-started | Vercel + Koyeb + Neon public environment | 2, 3, 4 |
 | 9. Portfolio launch | not-started | Demo media, README, diagrams, audit, tagged release | 6, 7, 8 |

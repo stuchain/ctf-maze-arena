@@ -89,7 +89,7 @@ test('missing replay has a branded recovery state', async ({ page }) => {
   await expectNoSeriousAccessibilityViolations(page);
 });
 
-test('completed replay exposes accessible playback controls', async ({ page, request }) => {
+test('completed replay exposes accessible playback controls', async ({ page, request, context }) => {
   const api = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8080';
   const generated = await request.post(`${api}/api/maze/generate`, {
     data: { w: 12, h: 12, seed: 4404, algo: 'KRUSKAL' },
@@ -103,8 +103,26 @@ test('completed replay exposes accessible playback controls', async ({ page, req
   await expect.poll(async () => (await request.get(`${api}/api/replay/${runId}`)).status(), { timeout: 20_000 }).toBe(200);
   await page.goto(`/replay/${runId}`);
   await expect(page.getByRole('heading', { name: 'Solve replay' })).toBeVisible();
+  await expect(page.getByText('Seed 4,404')).toBeVisible();
   await expect(page.getByLabel('Replay frame')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page.getByText(/Step 2 \/ /)).toBeVisible();
+  await page.getByLabel('Playback speed').selectOption('2');
+  await expect(page.getByLabel('Playback speed')).toHaveValue('2');
+  const playback = page.getByRole('group', { name: 'Replay playback controls' });
+  await playback.focus();
+  await playback.press('ArrowRight');
+  await expect(page.getByText(/Step 3 \/ /)).toBeVisible();
+  await playback.press('Home');
+  await expect(page.getByText(/Step 1 \/ /)).toBeVisible();
+  await playback.press('Space');
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+  await playback.press('Space');
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByRole('button', { name: 'Share replay' }).click();
+  await expect(page.locator('.copy-status')).toContainText(/Link copied|Replay shared/);
   await expect(page.getByTestId('maze-grid')).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page);
 });
