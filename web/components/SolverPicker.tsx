@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/ui/Primitives';
+
 const SOLVERS = [
   { value: 'BFS', label: 'BFS' },
   { value: 'DFS', label: 'DFS' },
@@ -11,15 +13,18 @@ export interface SolverPickerProps {
   value: string;
   onChange: (solver: string) => void;
   id?: string;
+  describedBy?: string;
 }
 
-export function SolverPicker({ value, onChange, id = 'solver-picker' }: SolverPickerProps) {
+export function SolverPicker({ value, onChange, id = 'solver-picker', describedBy }: SolverPickerProps) {
   return (
-    <select
+    <Select
       id={id}
+      name="maze-solver"
+      autoComplete="off"
+      aria-describedby={describedBy}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="border rounded px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1"
       data-testid="solver-picker"
     >
       {SOLVERS.map((s) => (
@@ -27,7 +32,7 @@ export function SolverPicker({ value, onChange, id = 'solver-picker' }: SolverPi
           {s.label}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }
 

@@ -1,6 +1,6 @@
 # Phase 4 — Design system and application shell
 
-**Status:** ready
+**Status:** complete
 
 **Depends on:** Phase 1
 
@@ -73,13 +73,13 @@ Motion communicates causality: panel transition, state change, solve progress, p
 
 ## Work checklist
 
-- [ ] Produce low-fidelity layout and state inventory before styling.
-- [ ] Define semantic tokens and both themes.
-- [ ] Build/test the minimal component set.
-- [ ] Implement responsive application shell and navigation.
-- [ ] Create branded metadata, iconography, copy voice, and theme persistence.
-- [ ] Design skeleton, API wake-up, reconnect, empty, failure, and not-found states.
-- [ ] Add accessibility automation and representative visual snapshots.
+- [x] Produce low-fidelity layout and state inventory before styling.
+- [x] Define semantic tokens and both themes.
+- [x] Build/test the minimal component set.
+- [x] Implement responsive application shell and navigation.
+- [x] Create branded metadata, iconography, copy voice, and theme persistence.
+- [x] Design skeleton, API wake-up, reconnect, empty, failure, and not-found states.
+- [x] Add accessibility automation and representative visual snapshots.
 
 ## Test strategy
 
@@ -97,20 +97,27 @@ Motion communicates causality: panel transition, state change, solve progress, p
 
 ## Exit criteria
 
-- [ ] Application shell is coherent at all target viewport classes.
-- [ ] Both themes and all core product states are intentionally designed.
-- [ ] Core navigation and controls are keyboard-complete.
-- [ ] Representative accessibility and visual tests pass.
-- [ ] No raw browser-default product controls or scaffolding copy remains.
+- [x] Application shell is coherent at all target viewport classes.
+- [x] Both themes and all core product states are intentionally designed.
+- [x] Core navigation and controls are keyboard-complete.
+- [x] Representative accessibility and visual tests pass.
+- [x] No raw browser-default product controls or scaffolding copy remains.
 
 ## Verification record
 
 | Date | Change | Evidence |
 |---|---|---|
-| — | Not implemented | — |
+| 2026-09-03 | Semantic token system, dark/light themes, responsive three-region shell, reusable controls, branded metadata/iconography, and intentional route/run/replay states | `npm run lint`; `npm run typecheck`; `npm run test:unit`; `npm run build` |
+| 2026-09-03 | Keyboard, reduced-motion, 320px mobile, tablet, desktop, 200% zoom equivalent, cancellation dialog, complete/missing replays, and dark/light axe coverage | `npm run test:e2e` — 11 passed against the production frontend, real Rust API, and PostgreSQL; representative screenshots captured as test attachments |
+| 2026-09-03 | Cross-stack regression gate | `./scripts/verify.ps1 -Scope all` — Rust format/Clippy, 68 Rust tests, 11 frontend unit tests, lint, TypeScript, and production build passed |
+| 2026-09-03 | Manual visual and console smoke | Dark and light desktop renders reviewed; no browser warnings, errors, page errors, or horizontal overflow remained |
 
 ## Decision and deviation log
 
 | Date | Decision or deviation | Consequence |
 |---|---|---|
 | 2026-09-02 | Premium dark algorithm lab is primary; light theme remains first-class. | All tokens and visual tests require two-theme coverage. |
+| 2026-09-03 | Use semantic CSS tokens and a small in-repository primitive layer rather than a general-purpose UI package. | The shell remains distinctive and dependency cost stays limited to test-only axe automation. |
+| 2026-09-03 | Keep configuration and inspector in document flow on mobile with a sticky section navigator. | Stage-first reading order and 200% zoom remain robust without JavaScript-owned drawer state. |
+| 2026-09-03 | Treat screenshot attachments plus geometric assertions as the portable visual gate for Phase 4. | CI retains reviewable visual evidence without introducing operating-system-sensitive pixel baselines; strict rendering baselines may be added with a standardized Linux image later. |
+| 2026-09-03 | Return an empty session payload in anonymous mode while keeping every other disabled auth route unavailable. | NextAuth no longer produces expected-but-noisy browser errors, and anonymous mode remains closed to sign-in operations. |

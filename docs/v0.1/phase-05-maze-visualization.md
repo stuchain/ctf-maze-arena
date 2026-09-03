@@ -1,6 +1,6 @@
 # Phase 5 — Maze visualization and replay
 
-**Status:** not-started
+**Status:** ready
 
 **Depends on:** Phases 3 and 4
 

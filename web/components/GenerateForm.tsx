@@ -2,6 +2,7 @@
 
 import type { FormEvent } from 'react';
 import { useState } from 'react';
+import { Button, Field, Select } from '@/components/ui/Primitives';
 
 export interface GenerateFormParams {
   w: number;
@@ -29,69 +30,79 @@ export function GenerateForm({ onSubmit, loading }: GenerateFormProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-2 max-w-xs"
+      className="configuration-form"
       data-testid="generate-form"
     >
-      <label htmlFor="maze-width-input">
-        Width:{' '}
+      <div className="field-row">
+        <Field label="Width" htmlFor="maze-width-input" hint="5–50 cells">
         <input
           id="maze-width-input"
+          name="maze-width"
           type="number"
+          inputMode="numeric"
+          autoComplete="off"
+          aria-describedby="maze-width-input-description"
           min={5}
           max={50}
           value={w}
           onChange={(e) => setW(Number(e.target.value))}
-          className="border w-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1"
+          className="control"
         />
-      </label>
-
-      <label htmlFor="maze-height-input">
-        Height:{' '}
+        </Field>
+        <Field label="Height" htmlFor="maze-height-input" hint="5–50 cells">
         <input
           id="maze-height-input"
+          name="maze-height"
           type="number"
+          inputMode="numeric"
+          autoComplete="off"
+          aria-describedby="maze-height-input-description"
           min={5}
           max={50}
           value={h}
           onChange={(e) => setH(Number(e.target.value))}
-          className="border w-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1"
+          className="control"
         />
-      </label>
+        </Field>
+      </div>
 
-      <label htmlFor="maze-seed-input">
-        Seed:{' '}
+      <Field label="Seed" htmlFor="maze-seed-input" hint="Share this seed to recreate the maze.">
         <input
           id="maze-seed-input"
+          name="maze-seed"
           type="number"
+          inputMode="numeric"
+          autoComplete="off"
+          aria-describedby="maze-seed-input-description"
           min={0}
           value={seed}
           onChange={(e) => setSeed(Number(e.target.value))}
-          className="border w-24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1"
+          className="control"
         />
-      </label>
+      </Field>
 
-      <label htmlFor="maze-algo-select">
-        Algorithm:{' '}
-        <select
+      <Field label="Generator" htmlFor="maze-algo-select">
+        <Select
           id="maze-algo-select"
+          name="maze-generator"
+          autoComplete="off"
           value={algo}
           onChange={(e) => setAlgo(e.target.value)}
-          className="border ml-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1"
         >
           <option value="KRUSKAL">Kruskal</option>
           <option value="PRIM">Prim</option>
-          <option value="DFS">DFS</option>
-        </select>
-      </label>
+          <option value="DFS">Depth-First Search</option>
+        </Select>
+      </Field>
 
-      <button
+      <Button
         type="submit"
-        disabled={loading}
-        className="bg-blue-500 text-white px-4 py-2 rounded disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 focus-visible:ring-offset-2"
+        loading={loading}
+        className="button--full"
         data-testid="generate-button"
       >
-        {loading ? 'Generating...' : 'Generate Maze'}
-      </button>
+        {loading ? 'Generating…' : 'Generate Maze'}
+      </Button>
     </form>
   );
 }

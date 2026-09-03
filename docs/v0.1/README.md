@@ -11,6 +11,7 @@ This directory is the source of truth for the v0.1 improvement program. It is in
 - [Phase 3 — Realtime solve engine](phase-03-realtime-engine.md)
 - [Realtime protocol v1](realtime-protocol-v1.md)
 - [Phase 4 — Design system and application shell](phase-04-design-system.md)
+- [Phase 4 — Layout and state inventory](phase-04-layout-state-inventory.md)
 - [Phase 5 — Maze visualization and replay](phase-05-maze-visualization.md)
 - [Phase 6 — Algorithm Race](phase-06-algorithm-race.md)
 - [Phase 7 — Identity and community](phase-07-identity-and-community.md)
@@ -38,5 +39,6 @@ Allowed statuses are `not-started`, `in-design`, `ready`, `in-progress`, `blocke
 - Phase 1 — Engineering foundations: `complete`
 - Phase 2 — Backend correctness and Postgres: `complete`
 - Phase 3 — Realtime solve engine: `complete`
-- Current phase: Phase 4 — Design system and application shell (`ready`)
+- Phase 4 — Design system and application shell: `complete`
+- Current phase: Phase 5 — Maze visualization and replay (`ready`)
 - Product implementation under this roadmap: active
