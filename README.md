@@ -5,7 +5,7 @@ Generate mazes, run solvers, stream solve progress, and view replays/leaderboard
 
 ## Stack
 
-- Backend: Rust, Axum, SQLx, SQLite
+- Backend: Rust, Axum, SQLx, PostgreSQL
 - Frontend: Next.js, React, TypeScript
 - Testing: Rust tests, Vitest unit tests, and Playwright E2E
 
@@ -13,11 +13,12 @@ Generate mazes, run solvers, stream solve progress, and view replays/leaderboard
 
 - Rust (stable) + Cargo
 - Node.js + npm
+- PostgreSQL 16+ (or Docker Compose)
 
 ## Quick Start
 
-1. Copy `.env.example` to `.env` (repo root).  
-2. Start backend:
+1. Copy `.env.example` to `.env` (repo root) and start PostgreSQL (`docker compose up postgres -d` is the quickest option).
+2. Start the backend:
 
    ```bash
    cargo run
@@ -43,7 +44,8 @@ Run the canonical repository checks from PowerShell with `./scripts/verify.ps1`.
 - `src/api/` - HTTP + WebSocket handlers
 - `src/maze/` - maze generation/model
 - `src/solve/` - solver implementations
-- `src/store/` - SQLite persistence
+- `src/services/` - domain workflows and background execution
+- `src/store/` - PostgreSQL persistence
 - `migrations/` - database migrations
 - `web/` - Next.js app
 
@@ -54,7 +56,7 @@ Run the canonical repository checks from PowerShell with `./scripts/verify.ps1`.
 - `AUTH_MODE` options:
   - `anonymous` (default)
   - `optional_jwt`
-  - `jwt` (required on `POST /api/solve` and `POST /api/leaderboard`)
+  - `jwt` (requires a JWT for protected identity operations; anonymous solves remain available)
 - Quick rollback: set `AUTH_MODE=anonymous`
 
 ## Useful docs

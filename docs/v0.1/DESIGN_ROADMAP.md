@@ -2,9 +2,9 @@
 
 **Status:** active
 
-**Last updated:** 2026-09-02
+**Last updated:** 2026-09-03
 
-**Current phase:** Phase 2 is ready
+**Current phase:** Phase 3 is ready
 **Target:** a polished, public, completely free portfolio experience
 
 ## 1. Vision
@@ -34,17 +34,15 @@ Free tiers provide no production SLA. Koyeb may scale the API to zero after one 
 ### Existing strengths
 
 - Rust/Axum backend with deterministic generation and four solvers.
-- SQLite persistence, replay storage, WebSocket transport, GitHub OAuth, JWT modes, CORS, rate limiting, request IDs, structured logging, Docker, CI, benchmarks, and Playwright smoke tests.
-- 62 Rust tests and 8 frontend unit tests pass; formatting, Clippy, full ESLint, TypeScript, production build, and Playwright flows share enforced quality gates.
+- PostgreSQL persistence, replay storage, WebSocket transport, GitHub OAuth, JWT modes, CORS, rate limiting, request IDs, structured logging, Docker, CI, benchmarks, and Playwright smoke tests.
+- 61 Rust tests and 8 frontend unit tests pass; formatting, Clippy, full ESLint, TypeScript, production build, and Playwright flows share enforced quality gates.
 - Typed frontend API parsing, fail-fast runtime configuration, secret-safe environment examples, dependency review, and hardened container scanning are established.
 
 ### Remaining credibility gaps
 
-- The leaderboard displays all completed runs rather than submitted scores; the UI does not submit scores.
 - Solver frames are broadcast after solving and fast runs can finish before subscription.
-- CPU-bound solver work runs on the async runtime; background persistence errors are discarded.
 - Maze walls are drawn between cell centers instead of on boundaries; rendering repeatedly scans arrays per cell.
-- Component, protocol, and backend API integration coverage remain incomplete.
+- Component and realtime protocol coverage remain incomplete.
 
 ## 4. Phase plan
 
@@ -52,8 +50,8 @@ Free tiers provide no production SLA. Koyeb may scale the API to zero after one 
 |---|---|---|---|
 | 0. Product and architecture | complete | Binding decisions and quality bar | — |
 | 1. Engineering foundations | complete | Honest CI, safe configuration, clean repository | 0 |
-| 2. Backend and Postgres | ready | Correct lifecycle, durable schema, trustworthy leaderboard | 1 |
-| 3. Realtime engine | not-started | Incremental, resumable, bounded solve streaming | 2 |
+| 2. Backend and Postgres | complete | Correct lifecycle, durable schema, trustworthy leaderboard | 1 |
+| 3. Realtime engine | ready | Incremental, resumable, bounded solve streaming | 2 |
 | 4. Design system | not-started | Premium responsive shell and reusable UI primitives | 1 |
 | 5. Maze visualization | not-started | Correct, fast, accessible maze and replay controls | 3, 4 |
 | 6. Algorithm Race | not-started | Signature comparison and education experience | 5 |
@@ -106,3 +104,4 @@ v0.1 is complete only when:
 |---|---|
 | 2026-09-02 | Created v0.1 roadmap and analytical phase documents. Recorded free-only hosting, premium dark visual direction, retained product name, GitHub identity, Postgres, and Vercel URL decisions. |
 | 2026-09-02 | Completed Phase 1 with canonical local/CI checks, typed frontend boundaries, validated configuration, repository cleanup, dependency automation, and hardened production containers. Advanced Phase 2 to ready. |
+| 2026-09-03 | Completed Phase 2 with PostgreSQL persistence, explicit durable run states, bounded blocking execution, restart recovery, stable GitHub ownership, submitted-only rankings, safe API errors, and database/HTTP integration coverage. Advanced Phase 3 to ready. |

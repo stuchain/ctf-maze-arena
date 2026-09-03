@@ -12,7 +12,7 @@ All REST routes below are under `/api`.
 - `AUTH_MODE` controls enforcement:
   - `anonymous`: no JWT required.
   - `optional_jwt`: JWT accepted when present.
-  - `jwt`: JWT required on protected routes (`POST /api/solve`, `POST /api/leaderboard`).
+  - `jwt`: JWT required on protected identity routes (`POST /api/leaderboard`). Anonymous solves remain available.
 
 ## GET /api/health
 
@@ -26,9 +26,13 @@ Returns build-aware JSON:
 }
 ```
 
+This is process liveness and does not query dependencies. `GET /api/ready` checks PostgreSQL and returns `200` only when the API can serve database-backed traffic.
+
 ## POST /api/maze/generate
 
 Generate a new maze and persist it.
+
+Returns `201 Created`.
 
 **Request body** (`w` / `h` / `seed` / `algo` are lowercase keys as in JSON):
 
@@ -68,6 +72,8 @@ Returns the same maze JSON object as in `generate`’s `maze` field, for a store
 ## POST /api/solve
 
 Start an asynchronous solve. Responds immediately with a `runId`; progress and results are delivered over the WebSocket (see below).
+
+Returns `202 Accepted`. The run is first stored as `queued`, then transitions to `running` and a terminal state.
 
 **Request** (camelCase keys):
 
@@ -134,9 +140,13 @@ Connect with query parameter `runId` matching the solve response.
 
 Returns stored replay JSON (camelCase): `mazeId`, `solver`, `seed`, `frames`, `path`, `stats`.
 
+## GET /api/run/:runId
+
+Returns durable run status, timestamps, safe failure code, and server-computed metrics when complete.
+
 ## GET /api/leaderboard?mazeId=...
 
-Query: `mazeId` (camelCase) = maze uuid.
+Query: `mazeId` (camelCase) = maze UUID, `limit` = 1–100 (default 50), and `offset` = 0–10000.
 
 **Response:** JSON array of entries:
 
@@ -147,19 +157,20 @@ Query: `mazeId` (camelCase) = maze uuid.
     "solver": "ASTAR",
     "cost": 10,
     "ms": 2,
-    "visited": 50
+    "visited": 50,
+    "displayName": "octocat",
+    "avatarUrl": "https://avatars.githubusercontent.com/..."
   }
 ]
 ```
 
-Sorted by cost, then time, then visited (best first), capped at 50.
+Only explicitly accepted submissions are returned. Ordering is stable: cost, time, visited, acceptance time, then run ID.
 
 ## POST /api/leaderboard
 
 Submit a completed run to the leaderboard pipeline.
 
-In `AUTH_MODE=jwt`, this endpoint requires `Authorization: Bearer <token>`.
-In `AUTH_MODE=optional_jwt` and `AUTH_MODE=anonymous`, auth is optional.
+This endpoint requires `Authorization: Bearer <token>` whenever authentication is enabled. The completed run must already be owned by the same stable GitHub identity.
 
 **Request**:
 
@@ -173,7 +184,21 @@ In `AUTH_MODE=optional_jwt` and `AUTH_MODE=anonymous`, auth is optional.
 
 ```json
 {
-  "accepted": true
+  "accepted": true,
+  "duplicate": false
+}
+```
+
+The first valid submission returns `201 Created`; an idempotent duplicate returns `200 OK` with `duplicate: true`.
+
+## Error envelope
+
+REST failures use a stable, safe shape and never expose database details:
+
+```json
+{
+  "error": { "code": "invalid_request", "message": "..." },
+  "requestId": "..."
 }
 ```
 

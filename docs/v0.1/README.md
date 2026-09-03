@@ -35,5 +35,6 @@ Allowed statuses are `not-started`, `in-design`, `ready`, `in-progress`, `blocke
 - Design package: `complete`
 - Phase 0: `complete`
 - Phase 1 — Engineering foundations: `complete`
-- Current phase: Phase 2 — Backend correctness and Postgres (`ready`)
+- Phase 2 — Backend correctness and Postgres: `complete`
+- Current phase: Phase 3 — Realtime solve engine (`ready`)
 - Product implementation under this roadmap: active

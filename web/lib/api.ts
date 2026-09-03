@@ -85,6 +85,11 @@ export const dailyResponseSchema = z.object({
 
 export const solveResponseSchema = z.object({ runId: z.string().min(1) });
 
+export const leaderboardSubmitResponseSchema = z.object({
+  accepted: z.literal(true),
+  duplicate: z.boolean(),
+});
+
 export const tokenResponseSchema = z.object({
   token: z.string().min(1),
   tokenType: z.literal('Bearer'),
@@ -97,6 +102,8 @@ export const leaderboardEntrySchema = z.object({
   cost: z.number().nonnegative(),
   ms: z.number().nonnegative(),
   visited: z.number().nonnegative(),
+  displayName: z.string().nullable().optional(),
+  avatarUrl: z.string().url().nullable().optional(),
 });
 
 export const leaderboardResponseSchema = z.array(leaderboardEntrySchema);

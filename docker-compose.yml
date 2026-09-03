@@ -1,11 +1,20 @@
-# Local API stack. Copy .env.example to .env and adjust if needed.
-#
-# DATABASE_URL=sqlite:./data/ctf_maze.db matches the volume below (/app/data in the container).
-#
-# Bind mounts: Docker Desktop maps host paths differently on Windows vs macOS; use a project-
-# relative ./data path for portability. On Windows, ensure the drive is shared in Docker settings.
+# Local full stack. Copy .env.example to .env and adjust optional settings if needed.
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ctf_maze
+      POSTGRES_USER: ctf_maze
+      POSTGRES_PASSWORD: local-development-only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ctf_maze -d ctf_maze"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
   api:
     build: .
     ports:
@@ -14,8 +23,10 @@ services:
       - .env
     environment:
       PORT: "8080"
-    volumes:
-      - ./data:/app/data
+      DATABASE_URL: postgresql://ctf_maze:local-development-only@postgres:5432/ctf_maze
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   web:
     build:
@@ -27,3 +38,6 @@ services:
       - "3000:3000"
     depends_on:
       - api
+
+volumes:
+  postgres-data:

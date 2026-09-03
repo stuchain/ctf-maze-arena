@@ -1,6 +1,6 @@
 # Phase 3 — Realtime solve engine
 
-**Status:** not-started
+**Status:** ready
 
 **Depends on:** Phase 2
 

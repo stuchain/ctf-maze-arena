@@ -1,6 +1,6 @@
 # Phase 2 — Backend correctness and Postgres
 
-**Status:** ready
+**Status:** complete
 
 **Depends on:** Phase 1
 
@@ -43,6 +43,7 @@ Use UUID primary keys, foreign keys, check constraints for dimensions/status/met
 stateDiagram-v2
   [*] --> queued
   queued --> running
+  queued --> failed
   queued --> cancelled
   running --> completed
   running --> failed
@@ -77,14 +78,14 @@ Solver execution uses `spawn_blocking` or an explicitly bounded blocking pool. C
 
 ## Work checklist
 
-- [ ] Define schema, constraints, indexes, and migration conventions.
-- [ ] Add Neon-compatible pooled Postgres configuration.
-- [ ] Refactor API/service/repository/error boundaries.
-- [ ] Implement the durable run state machine and bounded blocking execution.
-- [ ] Fix leaderboard ownership, submission, uniqueness, and query semantics.
-- [ ] Stop swallowing persistence/auth binding failures.
-- [ ] Add retention-ready timestamps and version replay payloads.
-- [ ] Add HTTP/database integration tests and migration-from-empty CI check.
+- [x] Define schema, constraints, indexes, and migration conventions.
+- [x] Add Neon-compatible pooled Postgres configuration.
+- [x] Refactor API/service/repository/error boundaries.
+- [x] Implement the durable run state machine and bounded blocking execution.
+- [x] Fix leaderboard ownership, submission, uniqueness, and query semantics.
+- [x] Stop swallowing persistence/auth binding failures.
+- [x] Add retention-ready timestamps and version replay payloads.
+- [x] Add HTTP/database integration tests and migration-from-empty CI check.
 
 ## Test strategy
 
@@ -102,20 +103,26 @@ Solver execution uses `spawn_blocking` or an explicitly bounded blocking pool. C
 
 ## Exit criteria
 
-- [ ] A clean Postgres database migrates and serves every current workflow.
-- [ ] No run can remain silently stuck after a known failure.
-- [ ] Only valid submitted runs appear on leaderboards.
-- [ ] Solver CPU work does not block async runtime workers.
-- [ ] Critical HTTP, auth, lifecycle, and query behavior has integration coverage.
+- [x] A clean Postgres database migrates and serves every current workflow.
+- [x] No run can remain silently stuck after a known failure.
+- [x] Only valid submitted runs appear on leaderboards.
+- [x] Solver CPU work does not block async runtime workers.
+- [x] Critical HTTP, auth, lifecycle, and query behavior has integration coverage.
 
 ## Verification record
 
 | Date | Change | Evidence |
 |---|---|---|
-| — | Not implemented | — |
+| 2026-09-03 | PostgreSQL migration and repository layer | Fresh PostgreSQL 16 database migrated twice successfully; schema constraints and supporting leaderboard indexes were exercised by `postgres_integration`. |
+| 2026-09-03 | Durable run lifecycle and bounded execution | Exhaustive state-machine unit test plus queued, running, completed, failed, panic, restart-recovery, atomic replay, and concurrency-cap integration scenarios passed. |
+| 2026-09-03 | Ownership and leaderboard integrity | Anonymous rejection, stable GitHub subject ownership, wrong-owner rejection, first/duplicate submission, tie ordering, pagination, and submitted-only query scenarios passed. |
+| 2026-09-03 | Full verification | Rust formatting, Clippy with warnings denied, 61 Rust tests, 8 frontend unit tests, TypeScript, ESLint, production build, Docker Compose validation, and 3 Playwright flows passed. |
 
 ## Decision and deviation log
 
 | Date | Decision or deviation | Consequence |
 |---|---|---|
 | 2026-09-02 | Postgres is the only production database target for v0.1. | SQLite compatibility is not a release requirement after migration. |
+| 2026-09-03 | Omit a SQLite data-transfer tool because no production or valuable development data exists. | The Postgres migration remains small, forward-only, and verified from an empty database. |
+| 2026-09-03 | Keep anonymous solve creation in every auth mode and protect leaderboard submission when auth is enabled. | Public play remains frictionless while ranked ownership is tied to a stable GitHub provider ID. |
+| 2026-09-03 | Mark active runs as `worker_interrupted` during single-instance startup recovery. | Process crashes cannot leave known orphaned work looking active; distributed recovery remains out of scope for v0.1. |

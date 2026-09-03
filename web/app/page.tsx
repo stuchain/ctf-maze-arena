@@ -12,6 +12,7 @@ import { signIn, signOut, useSession } from 'next-auth/react';
 import {
   dailyResponseSchema,
   generateResponseSchema,
+  leaderboardSubmitResponseSchema,
   leaderboardResponseSchema,
   requestJson,
   solveResponseSchema,
@@ -35,6 +36,7 @@ export default function Home() {
   const [runId, setRunId] = useState<string | null>(null);
   const [solveLoading, setSolveLoading] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [submissionStatus, setSubmissionStatus] = useState<string | null>(null);
   const [dailyInfo, setDailyInfo] = useState<{
     seed: number;
     date: string;
@@ -82,6 +84,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setRunId(null);
+    setSubmissionStatus(null);
 
     try {
       const data = await requestJson(`${API}/api/maze/generate`, generateResponseSchema, {
@@ -195,6 +198,7 @@ export default function Home() {
                 body: JSON.stringify({ mazeId, solver }),
               });
               setRunId(data.runId);
+              setSubmissionStatus(null);
             } catch (cause: unknown) {
               setError(toErrorMessage(cause, 'Solve failed'));
             } finally {
@@ -207,6 +211,43 @@ export default function Home() {
         >
           {solveLoading ? 'Solving...' : 'Solve'}
         </button>
+
+        {runId && solveStreamStatus === 'finished' && authStatus === 'authenticated' ? (
+          <button
+            type="button"
+            onClick={async () => {
+              setSubmissionStatus('Submitting score…');
+              setError(null);
+              try {
+                const result = await requestJson(
+                  `${API}/api/leaderboard`,
+                  leaderboardSubmitResponseSchema,
+                  {
+                    method: 'POST',
+                    headers: await authHeaders(),
+                    body: JSON.stringify({ runId }),
+                  },
+                );
+                setSubmissionStatus(result.duplicate ? 'Score already submitted.' : 'Score submitted!');
+                if (mazeId) {
+                  const entries = await requestJson(
+                    `${API}/api/leaderboard?mazeId=${encodeURIComponent(mazeId)}`,
+                    leaderboardResponseSchema,
+                  );
+                  setLeaderboard(entries);
+                }
+              } catch (cause: unknown) {
+                setSubmissionStatus(null);
+                setError(toErrorMessage(cause, 'Score submission failed'));
+              }
+            }}
+            disabled={submissionStatus === 'Submitting score…'}
+            className="rounded bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2"
+          >
+            Submit score
+          </button>
+        ) : null}
+        {submissionStatus ? <p role="status" className="text-sm text-zinc-600">{submissionStatus}</p> : null}
 
         <Achievements />
 

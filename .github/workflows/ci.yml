@@ -15,6 +15,22 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AUTH_MODE: anonymous
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ctf_maze_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ctf_maze_test
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ctf_maze_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ctf_maze_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@v1
@@ -50,6 +66,21 @@ jobs:
     needs: [rust, web]
     env:
       AUTH_MODE: anonymous
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ctf_maze_e2e
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ctf_maze_e2e
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ctf_maze_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@v1
@@ -74,7 +105,7 @@ jobs:
       - name: Wait for backend readiness
         run: |
           for i in {1..60}; do
-            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then
+            if curl -fsS http://127.0.0.1:8080/api/ready >/dev/null; then
               exit 0
             fi
             sleep 1

@@ -12,7 +12,7 @@ export async function GET() {
   }
 
   const session = await getServerSession(authOptions);
-  if (!session?.user) {
+  if (!session?.user?.githubSubject) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
@@ -23,8 +23,9 @@ export async function GET() {
 
   const now = Math.floor(Date.now() / 1000);
   const payload = {
-    sub: session.user.email ?? session.user.name ?? 'unknown',
+    sub: `github:${session.user.githubSubject}`,
     name: session.user.name ?? null,
+    avatarUrl: session.user.image ?? null,
     iat: now,
     exp: now + TOKEN_TTL_SECS,
   };

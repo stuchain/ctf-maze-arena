@@ -29,6 +29,22 @@ pub struct Grid {
     _data: Vec<()>,
 }
 
+impl<'de> Deserialize<'de> for Grid {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct GridPayload {
+            width: usize,
+            height: usize,
+        }
+
+        let payload = GridPayload::deserialize(deserializer)?;
+        Ok(Grid::new(payload.width, payload.height))
+    }
+}
+
 impl Grid {
     pub fn new(width: usize, height: usize) -> Self {
         Self {
@@ -131,7 +147,7 @@ impl Walls {
 }
 
 /// Maze: grid + walls + start and goal cells.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Maze {
     pub grid: Grid,
     pub walls: Walls,

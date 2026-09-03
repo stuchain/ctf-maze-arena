@@ -15,9 +15,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/target/release/ctf-maze-arena /app/ctf-maze-arena
-COPY --from=builder /app/migrations /app/migrations
 RUN useradd -r -u 10001 -M -s /bin/false app \
-    && mkdir -p /app/data \
     && chown -R app:app /app
 USER app
 ENV PORT=8080

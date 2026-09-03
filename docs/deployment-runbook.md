@@ -1,91 +1,52 @@
-# Deployment runbook (free-tier hosts)
+# Deployment runbook
 
-This project ships a Rust API in a container ([`Dockerfile`](../Dockerfile)) with **SQLite** on disk. Use this runbook to deploy without surprises.
-
-## SQLite and scaling
-
-- SQLite allows **one writer at a time** on a single file. Run **one container instance** per database file.
-- Do **not** point multiple replicas at the same SQLite path on shared storage; you risk locking failures or corruption.
-- A future phase can move to Postgres for multi-instance and HA.
+The Rust API is shipped as a non-root container and requires PostgreSQL. Phase 8 adds the final Koyeb, Neon, and Vercel production procedure; this document records the backend runtime contract established in Phase 2.
 
 ## Environment variables
 
-| Variable | Purpose | Example | Required in prod? |
-|----------|---------|---------|-------------------|
-| `PORT` | HTTP listen port inside the container (the app reads `PORT`; default `8080`). | `PORT=10000` | Usually platform-provided |
-| `DATABASE_URL` | SQLite path; must be on persistent storage in production. | `DATABASE_URL=sqlite:./data/ctf_maze.db` | Yes |
-| `RUST_LOG` | Application log verbosity. | `RUST_LOG=info` | Recommended |
-| `LOG_FORMAT` | Log output format (`pretty` default, `json` for machine parsing). | `LOG_FORMAT=json` | Recommended |
-| `ALLOWED_ORIGINS` | Comma-separated browser origin allowlist for CORS. Trailing slashes are normalized. | `ALLOWED_ORIGINS=https://app.example.com,https://www.example.com` | Yes (go-live requirement) |
-| `CORS_PERMISSIVE` | Escape hatch to allow permissive CORS in release when explicitly set to `true`. | `CORS_PERMISSIVE=true` | No (use only for controlled staging) |
-| `RATE_LIMIT_PER_SECOND` | Baseline per-IP refill rate for limited API routes. | `RATE_LIMIT_PER_SECOND=20` | Recommended |
-| `RATE_LIMIT_BURST` | Baseline per-IP burst size. | `RATE_LIMIT_BURST=40` | Recommended |
-| `RATE_LIMIT_EXPENSIVE_PER_SECOND` | Stricter per-IP refill rate for expensive routes (`POST /api/solve`, `POST /api/maze/generate`). | `RATE_LIMIT_EXPENSIVE_PER_SECOND=5` | Recommended |
-| `RATE_LIMIT_EXPENSIVE_BURST` | Stricter per-IP burst size for expensive routes. | `RATE_LIMIT_EXPENSIVE_BURST=10` | Recommended |
-| `TRUST_PROXY` | Toggle proxy-aware IP extraction for rate limiting (`SmartIpKeyExtractor` when `true`). | `TRUST_PROXY=false` | No (enable only behind trusted proxy) |
-| `JWT_SECRET` | Shared HMAC secret used by the web token route to mint API JWTs and by API middleware to validate them. | `JWT_SECRET=long-random-secret` | Required for `AUTH_MODE=jwt` and `optional_jwt` |
-| `JWT_CLOCK_SKEW_SECS` | Allowed clock skew for JWT `exp`/`iat` validation. | `JWT_CLOCK_SKEW_SECS=60` | Recommended |
-| `AUTH_MODE` | Auth rollout behavior (`anonymous`, `optional_jwt`, `jwt`). | `AUTH_MODE=anonymous` | Recommended |
+| Variable | Purpose | Example | Required in production? |
+|---|---|---|---|
+| `PORT` | HTTP listen port; defaults to `8080`. | `PORT=8080` | Platform-dependent |
+| `DATABASE_URL` | PostgreSQL connection string. Add provider-required TLS parameters such as `sslmode=require`. | `postgresql://user:password@host/database?sslmode=require` | Yes |
+| `DB_MAX_CONNECTIONS` | Maximum SQLx pool size; defaults to `5`. | `DB_MAX_CONNECTIONS=5` | Recommended |
+| `DB_CONNECT_ATTEMPTS` | Bounded startup connection attempts; defaults to `5`. | `DB_CONNECT_ATTEMPTS=5` | Recommended |
+| `MAX_CONCURRENT_SOLVES` | CPU-bound solver concurrency; defaults to `1`. | `MAX_CONCURRENT_SOLVES=1` | Recommended |
+| `RUST_LOG` | Application log filter. | `RUST_LOG=info` | Recommended |
+| `LOG_FORMAT` | `pretty` or machine-readable `json`. | `LOG_FORMAT=json` | Recommended |
+| `ALLOWED_ORIGINS` | Comma-separated exact browser origins. | `ALLOWED_ORIGINS=https://example.vercel.app` | Yes |
+| `TRUST_PROXY` | Enables forwarded-header rate-limit identity. | `TRUST_PROXY=true` | Only behind a trusted proxy |
+| `RATE_LIMIT_PER_SECOND` / `RATE_LIMIT_BURST` | Baseline per-IP limits. | `20` / `40` | Recommended |
+| `RATE_LIMIT_EXPENSIVE_PER_SECOND` / `RATE_LIMIT_EXPENSIVE_BURST` | Generate/solve limits. | `5` / `10` | Recommended |
+| `JWT_SECRET` | Shared HMAC secret for web-issued API tokens. | 32+ random characters | Required when auth is enabled |
+| `JWT_CLOCK_SKEW_SECS` | JWT clock tolerance. | `60` | Recommended |
+| `AUTH_MODE` | `anonymous`, `optional_jwt`, or `jwt`. | `optional_jwt` | Recommended |
 
-Platforms often set `PORT` for you. **If the app fails to bind**, confirm you are not hardcoding `8080` in the platform UI while the process expects another port.
+Never commit database credentials, OAuth credentials, or JWT secrets. Store them in the hosting provider’s secret manager.
 
-Do not commit `.env` files with real credentials or tokens. Keep secrets in your platform's secret manager (Render/Fly/etc.).
+## Startup and database behavior
 
-## Log format
+- Startup rejects missing or non-PostgreSQL `DATABASE_URL` values.
+- SQLx connects with a bounded pool and bounded retry loop, then runs forward-only embedded migrations.
+- Any `queued` or `running` jobs left by a process interruption become terminal `failed` runs with `worker_interrupted` before traffic is accepted.
+- PostgreSQL owns durable data; no container volume is required for the API.
 
-- Default output is human-readable (`LOG_FORMAT=pretty`).
-- For centralized logging stacks, set `LOG_FORMAT=json` so each line is structured JSON.
-- Validate JSON logs with a quick smoke test: run one API request and pipe output to `jq`.
+## Health and observability
 
-## TLS
+- `GET /api/health` is liveness and returns build version/SHA without requiring PostgreSQL.
+- `GET /api/ready` checks PostgreSQL and returns `503` with a safe error envelope when unavailable. Use this for readiness routing.
+- Set `LOG_FORMAT=json` in hosted environments and retain the `x-request-id` returned by failed requests.
 
-- Terminate **TLS at the edge** (managed load balancer, reverse proxy, or the PaaS HTTPS endpoint).
-- The container serves plain HTTP; do not rely on TLS inside the image for production.
+## TLS, CORS, and proxy trust
 
-## CORS and browser origins
+Terminate HTTPS at the hosting edge. Set `ALLOWED_ORIGINS` to the exact Vercel production and preview origins that should access the API. Set `TRUST_PROXY=true` only when the platform overwrites inbound forwarding headers; otherwise clients could spoof rate-limit identity.
 
-- `ALLOWED_ORIGINS` controls which browser origins may call the API cross-origin.
-- If `ALLOWED_ORIGINS` is unset, the app falls back to permissive behavior for local development convenience.
-- If `ALLOWED_ORIGINS` is set but empty/invalid, cross-origin CORS is disabled.
-- Before go-live, set `ALLOWED_ORIGINS` explicitly to your production web origins.
+## GitHub authentication
 
-## Client IP and proxy trust (rate limiting)
-
-- Default mode (`TRUST_PROXY=false`) keys rate limits by direct peer socket IP. This is safest and avoids header spoofing risk.
-- Proxy mode (`TRUST_PROXY=true`) uses forwarded headers (`x-forwarded-for`, `x-real-ip`, `forwarded`) to infer client IP.
-- Enable `TRUST_PROXY=true` only when your platform/load balancer overwrites or strips inbound forwarding headers from clients.
-- If this is misconfigured, attackers can spoof forwarding headers and evade per-IP limits.
-- For Render/Fly/Cloudflare-style deployments, confirm trusted proxy behavior in platform docs before enabling proxy mode.
-
-## Render (Docker)
-
-1. Create a **Web Service** from the repo with **Docker** runtime (root [`Dockerfile`](../Dockerfile)).
-2. Add a **persistent disk** and mount it at a path that matches `DATABASE_URL` (for example mount at `/data` and set `DATABASE_URL=sqlite:./data/ctf_maze.db` with `WORKDIR` `/app` and a subfolder, or mount at `/app/data` to match the default).
-3. Set `PORT` if Render does not inject it automatically for your service type (their docs describe the env var they provide).
-4. Keep **instance count at one** for SQLite unless you migrate the database.
-
-## Fly.io
-
-1. Use `fly launch` (or a `fly.toml`) with the same Docker image.
-2. Add a **volume** with `[[mounts]]` and mount it where the DB file lives; set `DATABASE_URL` accordingly (e.g. under `/data` in the machine).
-3. Set secrets: `fly secrets set DATABASE_URL=...` (and `RUST_LOG` if desired). Use Fly’s assigned **internal/external port** documentation so `PORT` matches what the proxy expects.
-4. Prefer **one region / one machine** for SQLite workloads on a single file.
-
-## Health check
-
-- `GET /api/health` should return JSON with `status: "ok"` plus build metadata (`version`, `gitSha`). Configure your platform health check to use that path.
-
-## OAuth and auth rollout notes
-
-- Configure GitHub OAuth callback URLs per environment:
-  - Local: `http://localhost:3000/api/auth/callback/github`
-  - Production: `https://<your-domain>/api/auth/callback/github`
-- In `AUTH_MODE=jwt`, requests to `POST /api/solve` and `POST /api/leaderboard` must include Bearer tokens minted by the web token route.
-- Roll back quickly by setting `AUTH_MODE=anonymous` and redeploying/restarting without touching schema.
+- Local callback: `http://localhost:3000/api/auth/callback/github`
+- Production callback: `https://<vercel-domain>/api/auth/callback/github`
+- The web app signs the stable GitHub provider account ID into short-lived API JWTs. Display names and email addresses are never used as ownership keys.
+- Anonymous solve creation stays available. Leaderboard submission requires a matching authenticated owner.
 
 ## Local parity
 
-- See [`docker-compose.yml`](../docker-compose.yml) and [`.env.example`](../.env.example) for a local stack with a bind-mounted `./data` directory.
-- Use [`scripts/verify-phase12-14.ps1`](../scripts/verify-phase12-14.ps1) for reproducible phase 12-14 checks.
-- Checklist/evidence mapping is tracked in [`phase-12-14-verification.md`](./phase-12-14-verification.md).
-- Day-1 incident handling and request correlation steps live in [`observability-runbook.md`](./observability-runbook.md).
+Run `docker compose up --build` to start PostgreSQL, the API, and the web app. The compose database uses a named development volume; remove that volume only when intentionally resetting local data. Run `./scripts/verify.ps1` for canonical checks, and use `TEST_DATABASE_URL` pointing at a dedicated database for integration tests.

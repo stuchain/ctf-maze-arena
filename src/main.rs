@@ -2,14 +2,12 @@ use axum::http::{header, HeaderName, HeaderValue, Request};
 use axum::middleware;
 use ctf_maze_arena::api;
 use ctf_maze_arena::solve;
-use sqlx::sqlite::SqlitePoolOptions;
+use sqlx::postgres::PgPoolOptions;
 use std::collections::HashMap;
 use std::fmt;
-use std::fs;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Semaphore};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
@@ -133,6 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         db: pool,
         solvers: solve::default_registry(),
         stream_broadcasts: Arc::new(RwLock::new(HashMap::new())),
+        solve_concurrency: Arc::new(Semaphore::new(parse_usize_env("MAX_CONCURRENT_SOLVES", 1))),
     });
 
     let rate_limit = RateLimitConfig::from_env();
@@ -238,7 +237,10 @@ fn init_logging() {
 fn cors_layer_from_env() -> CorsLayer {
     let base = CorsLayer::new()
         .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
-        .allow_headers([axum::http::header::CONTENT_TYPE]);
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
+        ]);
 
     let allowed_origins_raw = std::env::var("ALLOWED_ORIGINS").ok();
     match parse_allowed_origins_env(allowed_origins_raw.as_deref()) {
@@ -398,38 +400,63 @@ fn parse_allowed_origins(raw: &str) -> Vec<String> {
         .collect()
 }
 
-async fn init_db() -> Result<sqlx::SqlitePool, Box<dyn std::error::Error + Send + Sync>> {
-    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:./data/ctf_maze.db".into());
-
-    // If the DB path points to a file inside a folder (like `./data/ctf_maze.db`),
-    // make sure the folder exists and the DB file exists.
-    //
-    // This prevents startup failures like:
-    // `unable to open database file` when `data/ctf_maze.db` (or its parent dir)
-    // doesn't exist yet.
-    if let Some(path_part) = url.strip_prefix("sqlite:") {
-        // `sqlite://./data/ctf_maze.db` -> `./data/ctf_maze.db`
-        let path_part = path_part.trim_start_matches('/');
-        let db_path = Path::new(path_part);
-
-        if let Some(parent) = db_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        if !db_path.exists() {
-            fs::File::create(db_path)?;
+async fn init_db() -> Result<sqlx::PgPool, Box<dyn std::error::Error + Send + Sync>> {
+    let url = std::env::var("DATABASE_URL")
+        .map_err(|_| ConfigError("DATABASE_URL is required and must point to Postgres".into()))?;
+    if !url.starts_with("postgres://") && !url.starts_with("postgresql://") {
+        return Err(ConfigError(
+            "DATABASE_URL must use the postgres:// or postgresql:// scheme".into(),
+        )
+        .into());
+    }
+    let max_connections = parse_u32_env("DB_MAX_CONNECTIONS", 5);
+    let attempts = parse_u32_env("DB_CONNECT_ATTEMPTS", 5);
+    let options = PgPoolOptions::new()
+        .max_connections(max_connections)
+        .acquire_timeout(Duration::from_secs(10));
+    let mut last_error = None;
+    for attempt in 1..=attempts {
+        match options.clone().connect(&url).await {
+            Ok(pool) => {
+                ctf_maze_arena::store::migrate(&pool).await?;
+                let recovered = ctf_maze_arena::store::recover_interrupted_runs(&pool).await?;
+                if recovered > 0 {
+                    tracing::warn!(recovered, "marked interrupted solver runs as failed");
+                }
+                return Ok(pool);
+            }
+            Err(error) => {
+                tracing::warn!(attempt, attempts, %error, "database connection failed");
+                last_error = Some(error);
+                if attempt < attempts {
+                    tokio::time::sleep(Duration::from_millis(250 * u64::from(attempt))).await;
+                }
+            }
         }
     }
+    Err(last_error
+        .expect("at least one database connection attempt")
+        .into())
+}
 
-    let pool = SqlitePoolOptions::new()
-        .max_connections(5)
-        .connect(&url)
-        .await?;
-
-    // Apply migrations on startup so tables exist before we store anything.
-    let migrator = sqlx::migrate::Migrator::new(Path::new("./migrations")).await?;
-    migrator.run(&pool).await?;
-
-    Ok(pool)
+fn parse_usize_env(key: &str, default: usize) -> usize {
+    match std::env::var(key) {
+        Ok(value) => value
+            .trim()
+            .parse::<usize>()
+            .ok()
+            .filter(|value| *value > 0)
+            .unwrap_or_else(|| {
+                tracing::warn!(
+                    key,
+                    value,
+                    default,
+                    "invalid positive integer; using default"
+                );
+                default
+            }),
+        Err(_) => default,
+    }
 }
 
 #[cfg(test)]

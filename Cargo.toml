@@ -13,16 +13,19 @@ serde_json = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 rand = "0.8"
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "migrate"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "migrate", "macros", "uuid", "chrono", "json"] }
 dotenvy = "0.15"
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", features = ["v4", "serde"] }
 tower-http = { version = "0.5", features = ["cors", "set-header", "trace"] }
 chrono = { version = "0.4", features = ["serde"] }
 tower_governor = "0.7"
 jsonwebtoken = "9"
+thiserror = "2"
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }
 
 [[bench]]
 name = "maze_gen"
