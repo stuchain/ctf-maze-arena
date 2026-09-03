@@ -10,7 +10,7 @@ use ctf_maze_arena::{
     maze::Maze,
     replay::{Replay, ReplayStats},
     services::run,
-    solve::{self, SolveResult, SolveStats, Solver},
+    solve::{self, ProgressSink, SolveError, SolveProgress, SolveResult, SolveStats, Solver},
     store::{self, Identity, StoreError},
 };
 use http_body_util::BodyExt;
@@ -21,7 +21,7 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
     time::Duration,
@@ -32,14 +32,24 @@ use uuid::Uuid;
 
 const JWT_SECRET: &str = "phase-02-integration-secret-32-bytes-minimum";
 
-fn build_app(pool: PgPool, solvers: solve::SolverRegistry, concurrency: usize) -> Router {
+fn build_app(
+    pool: PgPool,
+    solvers: solve::SolverRegistry,
+    concurrency: usize,
+) -> (Router, Arc<AppState>) {
     let state = Arc::new(AppState {
         db: pool,
         solvers,
         stream_broadcasts: Arc::new(RwLock::new(HashMap::new())),
         solve_concurrency: Arc::new(Semaphore::new(concurrency)),
+        active_solve_limits: run::ActiveSolveLimiter::new(10),
+        accepting_solves: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        realtime_config: run::RealtimeConfig {
+            terminal_retention: Duration::from_secs(2),
+            ..Default::default()
+        },
     });
-    api::router(state, 10_000, 10_000, 10_000, 10_000, false)
+    let router = api::router(Arc::clone(&state), 10_000, 10_000, 10_000, 10_000, false)
         .layer(middleware::from_fn_with_state(
             JwtConfig {
                 secret: Some(JWT_SECRET.into()),
@@ -48,7 +58,8 @@ fn build_app(pool: PgPool, solvers: solve::SolverRegistry, concurrency: usize) -
             },
             api::jwt_claims_middleware,
         ))
-        .layer(middleware::from_fn(api::request_id_middleware))
+        .layer(middleware::from_fn(api::request_id_middleware));
+    (router, state)
 }
 
 fn request(method: &str, uri: &str, body: Option<Value>, token: Option<&str>) -> Request<Body> {
@@ -118,10 +129,11 @@ async fn wait_for_status(pool: &PgPool, run_id: Uuid, expected: RunStatus) -> st
 
 fn dummy_replay(maze_id: Uuid, stats: &SolveStats) -> Replay {
     Replay {
+        protocol_version: 1,
         maze_id: maze_id.to_string(),
         solver: "BFS".into(),
         seed: 1,
-        frames: vec![],
+        events: vec![],
         path: vec![],
         stats: ReplayStats {
             visited: stats.visited,
@@ -161,9 +173,227 @@ impl Solver for SlowSolver {
                 cost: 0,
                 ms: 75,
             },
-            frames: vec![],
         }
     }
+}
+
+struct CancellableSolver;
+impl Solver for CancellableSolver {
+    fn name(&self) -> &'static str {
+        "BFS"
+    }
+    fn solve(&self, _: &Maze) -> SolveResult {
+        SolveResult {
+            path: vec![],
+            stats: SolveStats {
+                visited: 200,
+                cost: 0,
+                ms: 400,
+            },
+        }
+    }
+    fn solve_with_progress(
+        &self,
+        _: &Maze,
+        progress: &mut dyn ProgressSink,
+        cancelled: &AtomicBool,
+    ) -> Result<SolveResult, SolveError> {
+        for step in 1..=200 {
+            if cancelled.load(Ordering::Acquire) {
+                return Err(SolveError::Cancelled);
+            }
+            progress.progress(SolveProgress {
+                step,
+                frontier: vec![[step % 50, 1]],
+                visited: (0..step.min(50)).map(|x| [x, 0]).collect(),
+                current: Some([step % 50, 0]),
+            });
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        Ok(self.solve(&Maze::new(5, 5)))
+    }
+}
+
+#[tokio::test]
+async fn phase_03_realtime_cancellation_limits_and_shutdown_contracts() {
+    let database_url = match std::env::var("TEST_DATABASE_URL") {
+        Ok(url) => url,
+        Err(_) => {
+            eprintln!("TEST_DATABASE_URL is not set; skipping PostgreSQL integration test");
+            return;
+        }
+    };
+    assert!(database_url.contains("ctf_maze_test"));
+    let pool = PgPoolOptions::new()
+        .max_connections(8)
+        .connect(&database_url)
+        .await
+        .unwrap();
+    store::migrate(&pool).await.unwrap();
+    let maze =
+        ctf_maze_arena::maze::generate(50, 50, 303, ctf_maze_arena::maze::GeneratorAlgo::Kruskal);
+    let maze_id = store::store_maze(&pool, &maze, 303, "KRUSKAL")
+        .await
+        .unwrap();
+
+    // A subscriber attached while work is active sees genuine intermediate progress.
+    let mut registry = solve::default_registry();
+    registry.insert("BFS".into(), Arc::new(CancellableSolver));
+    let (app, state) = build_app(pool.clone(), registry, 1);
+    let (status, body) = call(
+        &app,
+        request(
+            "POST",
+            "/api/solve",
+            Some(json!({"mazeId": maze_id, "solver": "BFS"})),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let run_id = Uuid::parse_str(body["runId"].as_str().unwrap()).unwrap();
+    let stream = state
+        .stream_broadcasts
+        .read()
+        .await
+        .get(&run_id)
+        .cloned()
+        .unwrap();
+    let mut subscriber = stream.subscribe();
+    let progress = tokio::time::timeout(Duration::from_secs(1), subscriber.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        progress,
+        ctf_maze_arena::realtime::ServerMessage::Snapshot { .. }
+            | ctf_maze_arena::realtime::ServerMessage::Delta { .. }
+    ));
+
+    let (status, cancelled) = call(
+        &app,
+        request("POST", &format!("/api/run/{run_id}/cancel"), None, None),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(cancelled, json!({"cancelled": true}));
+    wait_for_status(&pool, run_id, RunStatus::Cancelled).await;
+    assert!(stream.resume(0).messages.iter().any(|message| matches!(
+        message,
+        ctf_maze_arena::realtime::ServerMessage::Cancelled { .. }
+    )));
+
+    // Ownership is checked before the cancellation signal can reach a solver.
+    let owned_streams = Arc::new(RwLock::new(HashMap::new()));
+    let owned_gate = Arc::new(Semaphore::new(0));
+    let owned_limits = run::ActiveSolveLimiter::new(1);
+    let owned_accepting = Arc::new(AtomicBool::new(true));
+    let owned_config = run::RealtimeConfig::default();
+    let owner = Identity {
+        github_subject: "github-owner".into(),
+        display_name: Some("Owner".into()),
+        avatar_url: None,
+    };
+    let owned_run = run::start(run::StartRun {
+        pool: &pool,
+        streams: &owned_streams,
+        concurrency: &owned_gate,
+        active_limits: &owned_limits,
+        accepting: &owned_accepting,
+        config: &owned_config,
+        actor: "user:github-owner".into(),
+        maze_id,
+        maze: store::get_maze(&pool, maze_id).await.unwrap().unwrap(),
+        solver_name: "BFS".into(),
+        solver: Arc::new(CancellableSolver),
+        request_id: "owned-cancellation",
+        identity: Some(&owner),
+    })
+    .await
+    .unwrap();
+    let owned_stream = owned_streams.read().await.get(&owned_run).cloned().unwrap();
+    assert!(matches!(
+        run::cancel(&pool, &owned_streams, owned_run, Some("wrong-owner")).await,
+        Err(ctf_maze_arena::services::ServiceError::Forbidden)
+    ));
+    assert!(!owned_stream.is_cancelled());
+    assert!(
+        run::cancel(&pool, &owned_streams, owned_run, Some("github-owner"))
+            .await
+            .unwrap()
+    );
+    wait_for_status(&pool, owned_run, RunStatus::Cancelled).await;
+    run::shutdown(&pool, &owned_streams, &owned_accepting, &owned_gate).await;
+
+    // Per-actor limits reject excess queued work, and graceful shutdown terminalizes it.
+    let streams = Arc::new(RwLock::new(HashMap::new()));
+    let gate = Arc::new(Semaphore::new(0));
+    let limits = run::ActiveSolveLimiter::new(1);
+    let accepting = Arc::new(AtomicBool::new(true));
+    let config = run::RealtimeConfig {
+        terminal_retention: Duration::from_millis(50),
+        ..Default::default()
+    };
+    let first = run::start(run::StartRun {
+        pool: &pool,
+        streams: &streams,
+        concurrency: &gate,
+        active_limits: &limits,
+        accepting: &accepting,
+        config: &config,
+        actor: "ip:test".into(),
+        maze_id,
+        maze: store::get_maze(&pool, maze_id).await.unwrap().unwrap(),
+        solver_name: "BFS".into(),
+        solver: Arc::new(CancellableSolver),
+        request_id: "queued-first",
+        identity: None,
+    })
+    .await
+    .unwrap();
+    let rejected = run::start(run::StartRun {
+        pool: &pool,
+        streams: &streams,
+        concurrency: &gate,
+        active_limits: &limits,
+        accepting: &accepting,
+        config: &config,
+        actor: "ip:test".into(),
+        maze_id,
+        maze: store::get_maze(&pool, maze_id).await.unwrap().unwrap(),
+        solver_name: "BFS".into(),
+        solver: Arc::new(CancellableSolver),
+        request_id: "queued-second",
+        identity: None,
+    })
+    .await;
+    assert!(matches!(
+        rejected,
+        Err(ctf_maze_arena::services::ServiceError::TooManyRequests)
+    ));
+    run::shutdown(&pool, &streams, &accepting, &gate).await;
+    wait_for_status(&pool, first, RunStatus::Cancelled).await;
+    assert!(!accepting.load(Ordering::Acquire));
+    let rejected_shutdown = run::start(run::StartRun {
+        pool: &pool,
+        streams: &streams,
+        concurrency: &gate,
+        active_limits: &limits,
+        accepting: &accepting,
+        config: &config,
+        actor: "other".into(),
+        maze_id,
+        maze: store::get_maze(&pool, maze_id).await.unwrap().unwrap(),
+        solver_name: "BFS".into(),
+        solver: Arc::new(CancellableSolver),
+        request_id: "after-shutdown",
+        identity: None,
+    })
+    .await;
+    assert!(matches!(
+        rejected_shutdown,
+        Err(ctf_maze_arena::services::ServiceError::ShuttingDown)
+    ));
 }
 
 #[tokio::test]
@@ -190,7 +420,7 @@ async fn phase_02_postgres_http_and_lifecycle_contracts() {
     store::migrate(&pool).await.unwrap();
     assert_eq!(store::recover_interrupted_runs(&pool).await.unwrap(), 0);
 
-    let app = build_app(pool.clone(), solve::default_registry(), 1);
+    let (app, state) = build_app(pool.clone(), solve::default_registry(), 1);
     assert_eq!(
         call(&app, request("GET", "/api/health", None, None))
             .await
@@ -240,6 +470,17 @@ async fn phase_02_postgres_http_and_lifecycle_contracts() {
     assert_eq!(status, StatusCode::ACCEPTED);
     let anonymous_run = Uuid::parse_str(anonymous["runId"].as_str().unwrap()).unwrap();
     wait_for_status(&pool, anonymous_run, RunStatus::Completed).await;
+    let retained = state
+        .stream_broadcasts
+        .read()
+        .await
+        .get(&anonymous_run)
+        .cloned()
+        .expect("fast completed stream retained");
+    assert!(retained.resume(0).messages.iter().any(|message| matches!(
+        message,
+        ctf_maze_arena::realtime::ServerMessage::Completed { .. }
+    )));
     assert_eq!(
         call(
             &app,
@@ -420,7 +661,7 @@ async fn phase_02_postgres_http_and_lifecycle_contracts() {
     // A solver panic is converted to a durable failure rather than a stuck run.
     let mut panic_registry = solve::default_registry();
     panic_registry.insert("BFS".into(), Arc::new(PanicSolver));
-    let panic_app = build_app(pool.clone(), panic_registry, 1);
+    let (panic_app, panic_state) = build_app(pool.clone(), panic_registry, 1);
     let (_, panic_run) = call(
         &panic_app,
         request(
@@ -439,6 +680,14 @@ async fn phase_02_postgres_http_and_lifecycle_contracts() {
             .as_deref(),
         Some("solver_failed")
     );
+    let failed_stream = panic_state
+        .stream_broadcasts
+        .read()
+        .await
+        .get(&panic_id)
+        .cloned()
+        .unwrap();
+    assert!(failed_stream.resume(0).messages.iter().any(|message| matches!(message, ctf_maze_arena::realtime::ServerMessage::Failed { code, .. } if code == "solver_failed")));
 
     // CPU-bound tasks respect the configured concurrency cap.
     let active = Arc::new(AtomicUsize::new(0));
@@ -449,12 +698,19 @@ async fn phase_02_postgres_http_and_lifecycle_contracts() {
     });
     let streams = Arc::new(RwLock::new(HashMap::new()));
     let gate = Arc::new(Semaphore::new(1));
+    let active_limits = run::ActiveSolveLimiter::new(10);
+    let accepting = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let realtime_config = run::RealtimeConfig::default();
     let maze_a = store::get_maze(&pool, maze_id).await.unwrap().unwrap();
     let maze_b = store::get_maze(&pool, maze_id).await.unwrap().unwrap();
     let run_a = run::start(run::StartRun {
         pool: &pool,
         streams: &streams,
         concurrency: &gate,
+        active_limits: &active_limits,
+        accepting: &accepting,
+        config: &realtime_config,
+        actor: "bounded-a".into(),
         maze_id,
         maze: maze_a,
         solver_name: "BFS".into(),
@@ -468,6 +724,10 @@ async fn phase_02_postgres_http_and_lifecycle_contracts() {
         pool: &pool,
         streams: &streams,
         concurrency: &gate,
+        active_limits: &active_limits,
+        accepting: &accepting,
+        config: &realtime_config,
+        actor: "bounded-b".into(),
         maze_id,
         maze: maze_b,
         solver_name: "BFS".into(),

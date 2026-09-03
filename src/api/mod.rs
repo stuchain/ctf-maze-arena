@@ -9,7 +9,7 @@ use axum::{
     routing::{get, post},
     Extension, Router,
 };
-use std::sync::Arc;
+use std::sync::{atomic::AtomicBool, Arc};
 use tokio::sync::Semaphore;
 use tower_governor::{
     governor::GovernorConfigBuilder,
@@ -25,6 +25,9 @@ pub struct AppState {
     pub solvers: crate::solve::SolverRegistry,
     pub stream_broadcasts: crate::services::run::StreamMap,
     pub solve_concurrency: Arc<Semaphore>,
+    pub active_solve_limits: Arc<crate::services::run::ActiveSolveLimiter>,
+    pub accepting_solves: Arc<AtomicBool>,
+    pub realtime_config: crate::services::run::RealtimeConfig,
 }
 
 pub fn router(
@@ -45,6 +48,7 @@ pub fn router(
     let baseline = Router::new()
         .route("/maze/{maze_id}", get(handlers::get_maze))
         .route("/run/{run_id}", get(handlers::get_run))
+        .route("/run/{run_id}/cancel", post(handlers::cancel_run))
         .route("/replay/{run_id}", get(handlers::get_replay))
         .route(
             "/leaderboard",

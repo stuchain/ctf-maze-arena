@@ -85,6 +85,8 @@ export const dailyResponseSchema = z.object({
 
 export const solveResponseSchema = z.object({ runId: z.string().min(1) });
 
+export const cancelResponseSchema = z.object({ cancelled: z.boolean() });
+
 export const leaderboardSubmitResponseSchema = z.object({
   accepted: z.literal(true),
   duplicate: z.boolean(),

@@ -4,7 +4,7 @@ use crate::{
     store::{self, Identity, SubmissionOutcome},
 };
 use axum::{
-    extract::{rejection::JsonRejection, Path, Query},
+    extract::{rejection::JsonRejection, ConnectInfo, Path, Query},
     http::StatusCode,
     Extension, Json,
 };
@@ -96,6 +96,7 @@ pub(super) async fn solve(
     Extension(state): Extension<Arc<AppState>>,
     Extension(request_id): Extension<String>,
     claims: Option<Extension<AuthClaims>>,
+    ConnectInfo(peer): ConnectInfo<std::net::SocketAddr>,
     payload: Result<Json<SolveRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<SolveResponse>), ApiError> {
     let Json(request) = payload.map_err(|error| ApiError::invalid_json(error, &request_id))?;
@@ -116,10 +117,18 @@ pub(super) async fn solve(
         display_name: claims.name.clone(),
         avatar_url: claims.avatar_url.clone(),
     });
+    let actor = claims.as_ref().map_or_else(
+        || format!("ip:{}", peer.ip()),
+        |Extension(claims)| format!("user:{}", claims.sub),
+    );
     let run_id = run::start(run::StartRun {
         pool: &state.db,
         streams: &state.stream_broadcasts,
         concurrency: &state.solve_concurrency,
+        active_limits: &state.active_solve_limits,
+        accepting: &state.accepting_solves,
+        config: &state.realtime_config,
+        actor,
         maze_id,
         maze,
         solver_name: request.solver,
@@ -130,6 +139,20 @@ pub(super) async fn solve(
     .await
     .map_err(|error| ApiError::from_service(error, &request_id))?;
     Ok((StatusCode::ACCEPTED, Json(SolveResponse { run_id })))
+}
+
+pub(super) async fn cancel_run(
+    Extension(state): Extension<Arc<AppState>>,
+    Extension(request_id): Extension<String>,
+    claims: Option<Extension<AuthClaims>>,
+    Path(raw): Path<String>,
+) -> Result<Json<CancelResponse>, ApiError> {
+    let run_id = parse_uuid(&raw, "runId", &request_id)?;
+    let subject = claims.as_ref().map(|Extension(claims)| claims.sub.as_str());
+    let cancelled = run::cancel(&state.db, &state.stream_broadcasts, run_id, subject)
+        .await
+        .map_err(|error| ApiError::from_service(error, &request_id))?;
+    Ok(Json(CancelResponse { cancelled }))
 }
 
 pub(super) async fn get_run(

@@ -91,7 +91,7 @@ npx playwright show-trace test-results/<trace-folder>/trace.zip
 ## What the smoke suite covers
 
 - Generate maze and confirm grid rendering.
-- Solve maze and confirm terminal stream status reaches `finished`.
+- Solve a target-sized maze and confirm live sequence progress before terminal status reaches `completed`.
 - Signed-out token bridge behavior (`GET /api/token`) returns `401`.
 
 ## Auth-specific local checks

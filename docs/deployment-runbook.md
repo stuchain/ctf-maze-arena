@@ -1,6 +1,6 @@
 # Deployment runbook
 
-The Rust API is shipped as a non-root container and requires PostgreSQL. Phase 8 adds the final Koyeb, Neon, and Vercel production procedure; this document records the backend runtime contract established in Phase 2.
+The Rust API is shipped as a non-root container and requires PostgreSQL. Phase 8 adds the final Koyeb, Neon, and Vercel production procedure; this document records the backend and realtime runtime contract established through Phase 3.
 
 ## Environment variables
 
@@ -11,6 +11,11 @@ The Rust API is shipped as a non-root container and requires PostgreSQL. Phase 8
 | `DB_MAX_CONNECTIONS` | Maximum SQLx pool size; defaults to `5`. | `DB_MAX_CONNECTIONS=5` | Recommended |
 | `DB_CONNECT_ATTEMPTS` | Bounded startup connection attempts; defaults to `5`. | `DB_CONNECT_ATTEMPTS=5` | Recommended |
 | `MAX_CONCURRENT_SOLVES` | CPU-bound solver concurrency; defaults to `1`. | `MAX_CONCURRENT_SOLVES=1` | Recommended |
+| `MAX_ACTIVE_SOLVES_PER_ACTOR` | Queued/running solve cap per GitHub identity or source IP; defaults to `2`. | `MAX_ACTIVE_SOLVES_PER_ACTOR=2` | Recommended |
+| `STREAM_HISTORY_CAPACITY` / `STREAM_CLIENT_CAPACITY` | Retained run messages and per-client channel bounds; default `256` / `32`. | `256` / `32` | Recommended |
+| `STREAM_SAMPLE_EVERY` / `STREAM_SNAPSHOT_EVERY` | Progress sampling and full-snapshot cadence; default `2` / `32` solver steps. | `2` / `32` | Recommended |
+| `MAX_REPLAY_EVENTS` | Maximum persisted snapshot/delta events; defaults to `2048`. | `MAX_REPLAY_EVENTS=2048` | Recommended |
+| `STREAM_RETENTION_SECS` / `STREAM_HEARTBEAT_SECS` | Terminal stream retention and liveness interval; default `30` / `10` seconds. | `30` / `10` | Recommended |
 | `RUST_LOG` | Application log filter. | `RUST_LOG=info` | Recommended |
 | `LOG_FORMAT` | `pretty` or machine-readable `json`. | `LOG_FORMAT=json` | Recommended |
 | `ALLOWED_ORIGINS` | Comma-separated exact browser origins. | `ALLOWED_ORIGINS=https://example.vercel.app` | Yes |
@@ -28,6 +33,8 @@ Never commit database credentials, OAuth credentials, or JWT secrets. Store them
 - Startup rejects missing or non-PostgreSQL `DATABASE_URL` values.
 - SQLx connects with a bounded pool and bounded retry loop, then runs forward-only embedded migrations.
 - Any `queued` or `running` jobs left by a process interruption become terminal `failed` runs with `worker_interrupted` before traffic is accepted.
+- Graceful shutdown rejects new solves, durably cancels active work, and closes affected WebSockets with restart code `1012`.
+- Completed replays use protocol v1 snapshot/delta events, are limited to 8 MiB, expire after seven days, and are cleaned up at startup.
 - PostgreSQL owns durable data; no container volume is required for the API.
 
 ## Health and observability

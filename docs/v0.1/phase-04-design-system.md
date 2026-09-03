@@ -1,6 +1,6 @@
 # Phase 4 — Design system and application shell
 
-**Status:** not-started
+**Status:** ready
 
 **Depends on:** Phase 1
 

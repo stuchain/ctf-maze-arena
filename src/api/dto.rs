@@ -47,6 +47,11 @@ pub(super) struct SolveResponse {
     pub run_id: Uuid,
 }
 
+#[derive(Debug, Serialize)]
+pub(super) struct CancelResponse {
+    pub cancelled: bool,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct LeaderboardSubmitRequest {
@@ -77,4 +82,6 @@ fn default_limit() -> u32 {
 #[serde(rename_all = "camelCase")]
 pub(super) struct StreamQuery {
     pub run_id: String,
+    #[serde(default)]
+    pub after_sequence: u64,
 }

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('solve flow reaches finished stream state', async ({ page }) => {
+test('solve flow applies live progress before completing', async ({ page }) => {
   test.slow();
   test.setTimeout(90_000);
 
@@ -16,7 +16,8 @@ test('solve flow reaches finished stream state', async ({ page }) => {
   await expect(page.getByTestId('maze-grid')).toBeVisible();
 
   await page.getByTestId('solve-button').click();
-  await expect(page.getByTestId('stream-status')).toContainText('stream: finished', {
+  await expect(page.getByTestId('stream-status')).toContainText('stream: completed', {
     timeout: 60_000,
   });
+  await expect(page.getByTestId('stream-status')).toContainText(/sequence [1-9][0-9]*/);
 });

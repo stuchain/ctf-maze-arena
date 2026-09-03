@@ -5,17 +5,14 @@ import { useEffect, useState } from 'react';
 import { MazeGrid } from '@/components/MazeGrid';
 import { backendMazeToMazeData } from '@/lib/maze';
 import { publicEnv } from '@/lib/env';
+import { replayStates } from '@/lib/realtime';
 
 interface ReplayPayload {
   mazeId: string;
+  protocolVersion: number;
   solver: string;
   seed: number;
-  frames: Array<{
-    t: number;
-    frontier: [number, number][];
-    visited: [number, number][];
-    current?: [number, number];
-  }>;
+  events: unknown[];
   path: [number, number][];
   stats: { visited: number; cost: number; ms: number };
 }
@@ -50,10 +47,11 @@ function ReplayView({ runId }: { runId: string }) {
   }, [runId]);
 
   useEffect(() => {
-    if (!playing || !replay?.frames.length || frameIndex >= replay.frames.length - 1) return;
+    const frameCount = replay ? replayStates(replay.events).length : 0;
+    if (!playing || !frameCount || frameIndex >= frameCount - 1) return;
     const timer = setTimeout(() => setFrameIndex((index) => index + 1), 100);
     return () => clearTimeout(timer);
-  }, [playing, frameIndex, replay?.frames.length]);
+  }, [playing, frameIndex, replay]);
 
   useEffect(() => {
     if (!copied) return;
@@ -70,8 +68,9 @@ function ReplayView({ runId }: { runId: string }) {
   if (!replay || !mazeJson) return <main id="main-content" className="p-4">Loading replay…</main>;
 
   const maze = backendMazeToMazeData(mazeJson);
-  const frame = replay.frames[frameIndex];
-  const lastFrame = !replay.frames.length || frameIndex >= replay.frames.length - 1;
+  const frames = replayStates(replay.events);
+  const frame = frames[frameIndex];
+  const lastFrame = !frames.length || frameIndex >= frames.length - 1;
   const isPlaying = playing && !lastFrame;
 
   return (
@@ -105,7 +104,7 @@ function ReplayView({ runId }: { runId: string }) {
           Reset
         </button>
         <span className="self-center text-sm text-zinc-600">
-          Frame {replay.frames.length ? frameIndex + 1 : 0} / {replay.frames.length}
+          Frame {frames.length ? frameIndex + 1 : 0} / {frames.length}
         </span>
       </div>
 

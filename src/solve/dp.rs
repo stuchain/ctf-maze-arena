@@ -1,6 +1,10 @@
 use crate::maze::{neighbors_all, Cell, Maze};
-use crate::solve::{SolveResult, SolveStats, Solver};
+use crate::solve::{
+    cell_to_arr, NoopProgress, ProgressSink, SolveError, SolveProgress, SolveResult, SolveStats,
+    Solver,
+};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DpState {
@@ -36,36 +40,71 @@ impl Solver for DpKeysSolver {
     }
 
     fn solve(&self, maze: &Maze) -> SolveResult {
+        self.solve_with_progress(maze, &mut NoopProgress, &AtomicBool::new(false))
+            .expect("unlimited solve cannot cancel")
+    }
+
+    fn solve_with_progress(
+        &self,
+        maze: &Maze,
+        progress: &mut dyn ProgressSink,
+        cancelled: &AtomicBool,
+    ) -> Result<SolveResult, SolveError> {
         let start_time = std::time::Instant::now();
         let mut visited = HashSet::new();
         let mut parent: HashMap<DpState, DpState> = HashMap::new();
         let init = DpState::initial(maze.start);
         let mut queue = VecDeque::from([init]);
         let mut goal_state = None;
+        let mut step = 0_u32;
 
         while let Some(state) = queue.pop_front() {
+            if cancelled.load(Ordering::Acquire) {
+                return Err(SolveError::Cancelled);
+            }
             if !visited.insert(state) {
                 continue;
             }
-            if state.cell == maze.goal {
+            let reached_goal = state.cell == maze.goal;
+            if reached_goal {
                 goal_state = Some(state);
-                break;
             }
-            for next_cell in neighbors_all(state.cell, maze.grid.width, maze.grid.height) {
-                if !maze.can_move(state.cell, next_cell, state.keys) {
-                    continue;
+            if !reached_goal {
+                for next_cell in neighbors_all(state.cell, maze.grid.width, maze.grid.height) {
+                    if !maze.can_move(state.cell, next_cell, state.keys) {
+                        continue;
+                    }
+                    let mut next_state = DpState {
+                        cell: next_cell,
+                        keys: state.keys,
+                    };
+                    if let Some(kid) = maze.has_key_at(next_cell) {
+                        next_state = next_state.with_key(kid);
+                    }
+                    if !visited.contains(&next_state) && !parent.contains_key(&next_state) {
+                        parent.insert(next_state, state);
+                        queue.push_back(next_state);
+                    }
                 }
-                let mut next_state = DpState {
-                    cell: next_cell,
-                    keys: state.keys,
-                };
-                if let Some(kid) = maze.has_key_at(next_cell) {
-                    next_state = next_state.with_key(kid);
-                }
-                if !visited.contains(&next_state) && !parent.contains_key(&next_state) {
-                    parent.insert(next_state, state);
-                    queue.push_back(next_state);
-                }
+            }
+            step = step.saturating_add(1);
+            let mut frontier: Vec<_> = queue.iter().map(|value| cell_to_arr(value.cell)).collect();
+            frontier.sort_unstable();
+            frontier.dedup();
+            let mut visited_cells: Vec<_> = visited
+                .iter()
+                .map(|value| cell_to_arr(value.cell))
+                .collect();
+            visited_cells.sort_unstable();
+            visited_cells.dedup();
+            progress.progress(SolveProgress {
+                step,
+                frontier,
+                visited: visited_cells,
+                current: Some(cell_to_arr(state.cell)),
+            });
+            if reached_goal {
+                break;
             }
         }
 
@@ -76,15 +115,14 @@ impl Solver for DpKeysSolver {
         let cost = path.len().saturating_sub(1);
         let ms = start_time.elapsed().as_millis() as u64;
 
-        SolveResult {
+        Ok(SolveResult {
             path,
             stats: SolveStats {
                 visited: visited.len(),
                 cost,
                 ms,
             },
-            frames: vec![],
-        }
+        })
     }
 }
 

@@ -179,6 +179,8 @@ pub async fn complete_run(
     stats: &SolveStats,
     replay: &Replay,
 ) -> Result<(), StoreError> {
+    let payload_bytes = i32::try_from(serde_json::to_vec(replay)?.len())
+        .map_err(|_| StoreError::NumericOverflow)?;
     let payload = serde_json::to_value(replay)?;
     let mut tx = pool.begin().await?;
     let result = sqlx::query(
@@ -195,11 +197,13 @@ pub async fn complete_run(
         return Err(StoreError::InvalidTransition);
     }
     sqlx::query(
-        "INSERT INTO replays (id, run_id, protocol_version, payload) VALUES ($1, $2, 1, $3)",
+        "INSERT INTO replays (id, run_id, protocol_version, payload, payload_bytes) VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(Uuid::new_v4())
     .bind(run_id)
+    .bind(i16::try_from(replay.protocol_version).map_err(|_| StoreError::NumericOverflow)?)
     .bind(payload)
+    .bind(payload_bytes)
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -215,6 +219,76 @@ pub async fn fail_run(pool: &PgPool, run_id: RunId, error_code: &str) -> Result<
     } else {
         Err(StoreError::InvalidTransition)
     }
+}
+
+pub async fn cancel_run(
+    pool: &PgPool,
+    run_id: RunId,
+    github_subject: Option<&str>,
+) -> Result<bool, StoreError> {
+    let mut tx = pool.begin().await?;
+    let row = sqlx::query_as::<_, (String, Option<String>)>(
+        r#"SELECT r.status, u.github_subject FROM runs r
+           LEFT JOIN users u ON u.id = r.owner_user_id WHERE r.id = $1 FOR UPDATE OF r"#,
+    )
+    .bind(run_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(StoreError::NotFound)?;
+    if row.1.is_some() && row.1.as_deref() != github_subject {
+        return Err(StoreError::Forbidden);
+    }
+    if row.0 == "cancelled" {
+        return Ok(false);
+    }
+    if row.0 != "queued" && row.0 != "running" {
+        return Err(StoreError::InvalidTransition);
+    }
+    sqlx::query("UPDATE runs SET status = 'cancelled', completed_at = NOW() WHERE id = $1")
+        .bind(run_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+pub async fn authorize_run_cancellation(
+    pool: &PgPool,
+    run_id: RunId,
+    github_subject: Option<&str>,
+) -> Result<(), StoreError> {
+    let row = sqlx::query_as::<_, (String, Option<String>)>(
+        r#"SELECT r.status, u.github_subject FROM runs r
+           LEFT JOIN users u ON u.id = r.owner_user_id WHERE r.id = $1"#,
+    )
+    .bind(run_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or(StoreError::NotFound)?;
+    if row.1.is_some() && row.1.as_deref() != github_subject {
+        return Err(StoreError::Forbidden);
+    }
+    if row.0 != "queued" && row.0 != "running" && row.0 != "cancelled" {
+        return Err(StoreError::InvalidTransition);
+    }
+    Ok(())
+}
+
+pub async fn cancel_run_system(pool: &PgPool, run_id: RunId) -> Result<bool, StoreError> {
+    let result = sqlx::query(
+        "UPDATE runs SET status = 'cancelled', completed_at = NOW() WHERE id = $1 AND status IN ('queued', 'running')",
+    )
+    .bind(run_id)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected() == 1)
+}
+
+pub async fn delete_expired_replays(pool: &PgPool) -> Result<u64, StoreError> {
+    Ok(sqlx::query("DELETE FROM replays WHERE expires_at <= NOW()")
+        .execute(pool)
+        .await?
+        .rows_affected())
 }
 
 pub async fn get_run(pool: &PgPool, run_id: RunId) -> Result<Option<RunMetadata>, StoreError> {
@@ -278,11 +352,12 @@ pub async fn get_run(pool: &PgPool, run_id: RunId) -> Result<Option<RunMetadata>
 }
 
 pub async fn get_replay(pool: &PgPool, run_id: RunId) -> Result<Option<Replay>, StoreError> {
-    let payload =
-        sqlx::query_scalar::<_, serde_json::Value>("SELECT payload FROM replays WHERE run_id = $1")
-            .bind(run_id)
-            .fetch_optional(pool)
-            .await?;
+    let payload = sqlx::query_scalar::<_, serde_json::Value>(
+        "SELECT payload FROM replays WHERE run_id = $1 AND expires_at > NOW()",
+    )
+    .bind(run_id)
+    .fetch_optional(pool)
+    .await?;
     payload
         .map(serde_json::from_value)
         .transpose()

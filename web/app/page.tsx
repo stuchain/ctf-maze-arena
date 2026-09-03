@@ -10,6 +10,7 @@ import { useSolveStream } from '../hooks/useSolveStream';
 import { backendMazeToMazeData } from '@/lib/maze';
 import { signIn, signOut, useSession } from 'next-auth/react';
 import {
+  cancelResponseSchema,
   dailyResponseSchema,
   generateResponseSchema,
   leaderboardSubmitResponseSchema,
@@ -61,6 +62,7 @@ export default function Home() {
     path: solvePath,
     stats,
     error: solveStreamError,
+    sequence: solveSequence,
   } = useSolveStream(runId, solver);
 
   const frame = frames[frames.length - 1];
@@ -179,7 +181,7 @@ export default function Home() {
           frontier={frame?.frontier}
           visited={frame?.visited}
           current={frame?.current}
-          path={solveStreamStatus === 'finished' ? solvePath : undefined}
+          path={solveStreamStatus === 'completed' ? solvePath : undefined}
         />
 
         <button
@@ -212,7 +214,26 @@ export default function Home() {
           {solveLoading ? 'Solving...' : 'Solve'}
         </button>
 
-        {runId && solveStreamStatus === 'finished' && authStatus === 'authenticated' ? (
+        {runId && ['waking', 'connecting', 'live', 'reconnecting'].includes(solveStreamStatus) ? (
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await requestJson(`${API}/api/run/${encodeURIComponent(runId)}/cancel`, cancelResponseSchema, {
+                  method: 'POST',
+                  headers: await authHeaders(),
+                });
+              } catch (cause: unknown) {
+                setError(toErrorMessage(cause, 'Cancellation failed'));
+              }
+            }}
+            className="rounded border border-red-500 px-4 py-2 text-sm text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+          >
+            Cancel solve
+          </button>
+        ) : null}
+
+        {runId && solveStreamStatus === 'completed' && authStatus === 'authenticated' ? (
           <button
             type="button"
             onClick={async () => {
@@ -267,7 +288,8 @@ export default function Home() {
             {solveStreamError ? (
               <span className="text-red-600"> — {solveStreamError}</span>
             ) : null}
-            {stats && solveStreamStatus === 'finished'
+            {solveSequence > 0 ? ` | sequence ${solveSequence}` : null}
+            {stats && solveStreamStatus === 'completed'
               ? ` | visited ${stats.visited} cost ${stats.cost} ${stats.ms}ms`
               : null}
           </div>

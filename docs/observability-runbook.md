@@ -60,7 +60,7 @@ For a healthy solve flow:
 
 1. `POST /api/solve` returns `200` with a `runId`.
 2. Request completion log shows `path=/api/solve` and `status=200`.
-3. WebSocket stream for `/api/solve/stream?runId=...` ends with a `{"type":"finished", ...}` message.
+3. WebSocket stream for `/api/solve/stream?runId=...` emits protocol v1 progress and ends with a `completed`, `failed`, or `cancelled` message.
 4. `GET /api/replay/{runId}` returns persisted replay data.
 
 Useful checks:

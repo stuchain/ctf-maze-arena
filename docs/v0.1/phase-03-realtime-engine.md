@@ -1,6 +1,6 @@
 # Phase 3 — Realtime solve engine
 
-**Status:** ready
+**Status:** complete
 
 **Depends on:** Phase 2
 
@@ -60,13 +60,13 @@ Use a reducer/state machine rather than independent effect-driven state setters.
 
 ## Work checklist
 
-- [ ] Define and document protocol v1 schemas.
-- [ ] Refactor solver progress emission and replay recording.
-- [ ] Add bounded solve concurrency, channels, sampling, retention, and cancellation.
-- [ ] Implement sequence-based subscribe/resume and snapshots.
-- [ ] Implement client reducer, reconnect, terminal fallback, and cleanup.
-- [ ] Add heartbeat and graceful shutdown behavior.
-- [ ] Measure payload and memory growth on target maze sizes.
+- [x] Define and document protocol v1 schemas.
+- [x] Refactor solver progress emission and replay recording.
+- [x] Add bounded solve concurrency, channels, sampling, retention, and cancellation.
+- [x] Implement sequence-based subscribe/resume and snapshots.
+- [x] Implement client reducer, reconnect, terminal fallback, and cleanup.
+- [x] Add heartbeat and graceful shutdown behavior.
+- [x] Measure payload and memory growth on target maze sizes.
 
 ## Test strategy
 
@@ -84,20 +84,23 @@ Use a reducer/state machine rather than independent effect-driven state setters.
 
 ## Exit criteria
 
-- [ ] Fast solves cannot outrun subscription.
-- [ ] Intermediate progress is visibly and testably live.
-- [ ] Reconnect reconstructs a correct state without duplicate application.
-- [ ] Slow clients cannot cause unbounded memory growth.
-- [ ] Cancellation, failure, and shutdown reach durable terminal states.
+- [x] Fast solves cannot outrun subscription.
+- [x] Intermediate progress is visibly and testably live.
+- [x] Reconnect reconstructs a correct state without duplicate application.
+- [x] Slow clients cannot cause unbounded memory growth.
+- [x] Cancellation, failure, and shutdown reach durable terminal states.
 
 ## Verification record
 
 | Date | Change | Evidence |
 |---|---|---|
-| — | Not implemented | — |
+| 2026-09-03 | Protocol v1, incremental solver progress, snapshot/delta replay, bounded retention, reconnect, heartbeat, cancellation, and shutdown | `cargo test --all-targets`; real Postgres integration suite with `TEST_DATABASE_URL`; `npm run check`; `npm run test:e2e` (3 browser flows) |
+| 2026-09-03 | Concurrent target-size budget verification | Four 50×50 solves reconstruct their final visual states while remaining within 256 retained messages, 2,048 replay events, and the 8 MiB payload ceiling. |
 
 ## Decision and deviation log
 
 | Date | Decision or deviation | Consequence |
 |---|---|---|
-| — | None | — |
+| 2026-09-03 | Retain terminal streams for 30 seconds, then use durable run state and persisted replay as fallback. | Fast solves remain subscribable without making in-memory state a durability dependency. |
+| 2026-09-03 | Persist replay schema v1 as periodic snapshots plus deltas, capped at 2,048 events and 8 MiB with seven-day expiry. | Replay storage and browser state are bounded and deterministic. |
+| 2026-09-03 | Treat explicit cancellation as terminal and durably cancel active work during graceful shutdown. | Disconnecting a browser does not cancel work; process shutdown cannot leave active runs indefinitely. |

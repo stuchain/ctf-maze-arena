@@ -1,7 +1,10 @@
 use crate::maze::{Cell, Maze};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 pub mod astar;
 pub mod bfs;
@@ -23,9 +26,9 @@ pub struct SolveStats {
     pub ms: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SolveFrame {
-    pub t: u32,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SolveProgress {
+    pub step: u32,
     pub frontier: Vec<[u32; 2]>,
     pub visited: Vec<[u32; 2]>,
     pub current: Option<[u32; 2]>,
@@ -35,12 +38,48 @@ pub struct SolveFrame {
 pub struct SolveResult {
     pub path: Vec<Cell>,
     pub stats: SolveStats,
-    pub frames: Vec<SolveFrame>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum SolveError {
+    #[error("solve cancelled")]
+    Cancelled,
+}
+
+pub trait ProgressSink: Send {
+    fn progress(&mut self, progress: SolveProgress);
+}
+
+pub struct NoopProgress;
+impl ProgressSink for NoopProgress {
+    fn progress(&mut self, _: SolveProgress) {}
 }
 
 pub trait Solver: Send + Sync {
     fn name(&self) -> &'static str;
     fn solve(&self, maze: &Maze) -> SolveResult;
+    fn solve_with_progress(
+        &self,
+        maze: &Maze,
+        progress: &mut dyn ProgressSink,
+        cancelled: &AtomicBool,
+    ) -> Result<SolveResult, SolveError> {
+        if cancelled.load(Ordering::Acquire) {
+            return Err(SolveError::Cancelled);
+        }
+        let result = self.solve(maze);
+        if cancelled.load(Ordering::Acquire) {
+            Err(SolveError::Cancelled)
+        } else {
+            progress.progress(SolveProgress {
+                step: 1,
+                frontier: vec![],
+                visited: vec![],
+                current: None,
+            });
+            Ok(result)
+        }
+    }
 }
 
 pub type SolverRegistry = HashMap<String, Arc<dyn Solver>>;
@@ -94,7 +133,6 @@ impl Solver for StubSolver {
                 cost: 0,
                 ms: 0,
             },
-            frames: vec![],
         }
     }
 }

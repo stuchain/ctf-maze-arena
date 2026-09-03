@@ -5,7 +5,7 @@ use ctf_maze_arena::solve;
 use sqlx::postgres::PgPoolOptions;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
 use tokio::sync::{RwLock, Semaphore};
 use tower_http::cors::{Any, CorsLayer};
@@ -127,11 +127,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let pool = init_db().await?;
     tracing::info!("database initialized");
 
+    let realtime_config = ctf_maze_arena::services::run::RealtimeConfig {
+        history_capacity: parse_usize_env("STREAM_HISTORY_CAPACITY", 256),
+        client_channel_capacity: parse_usize_env("STREAM_CLIENT_CAPACITY", 32),
+        sample_every: parse_u32_env("STREAM_SAMPLE_EVERY", 2),
+        snapshot_every: parse_u32_env("STREAM_SNAPSHOT_EVERY", 32),
+        max_replay_events: parse_usize_env("MAX_REPLAY_EVENTS", 2048),
+        terminal_retention: Duration::from_secs(parse_u64_env("STREAM_RETENTION_SECS", 30)),
+        heartbeat_interval: Duration::from_secs(parse_u64_env("STREAM_HEARTBEAT_SECS", 10)),
+    };
     let state = Arc::new(api::AppState {
         db: pool,
         solvers: solve::default_registry(),
         stream_broadcasts: Arc::new(RwLock::new(HashMap::new())),
         solve_concurrency: Arc::new(Semaphore::new(parse_usize_env("MAX_CONCURRENT_SOLVES", 1))),
+        active_solve_limits: ctf_maze_arena::services::run::ActiveSolveLimiter::new(
+            parse_usize_env("MAX_ACTIVE_SOLVES_PER_ACTOR", 2),
+        ),
+        accepting_solves: Arc::new(AtomicBool::new(true)),
+        realtime_config,
     });
 
     let rate_limit = RateLimitConfig::from_env();
@@ -178,7 +192,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         );
 
     let app = api::router(
-        state,
+        Arc::clone(&state),
         rate_limit.per_second,
         rate_limit.burst,
         rate_limit.expensive_per_second,
@@ -216,6 +230,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
+    .with_graceful_shutdown(shutdown_signal(state))
     .await?;
     Ok(())
 }
@@ -423,6 +438,10 @@ async fn init_db() -> Result<sqlx::PgPool, Box<dyn std::error::Error + Send + Sy
                 if recovered > 0 {
                     tracing::warn!(recovered, "marked interrupted solver runs as failed");
                 }
+                let deleted = ctf_maze_arena::store::delete_expired_replays(&pool).await?;
+                if deleted > 0 {
+                    tracing::info!(deleted, "deleted expired replay payloads");
+                }
                 return Ok(pool);
             }
             Err(error) => {
@@ -457,6 +476,35 @@ fn parse_usize_env(key: &str, default: usize) -> usize {
             }),
         Err(_) => default,
     }
+}
+
+async fn shutdown_signal(state: Arc<api::AppState>) {
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("install terminate signal handler")
+            .recv()
+            .await;
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        result = tokio::signal::ctrl_c() => {
+            if let Err(error) = result {
+                tracing::error!(%error, "failed to listen for ctrl-c");
+            }
+        }
+        _ = terminate => {}
+    }
+    tracing::info!("graceful shutdown requested");
+    ctf_maze_arena::services::run::shutdown(
+        &state.db,
+        &state.stream_broadcasts,
+        &state.accepting_solves,
+        &state.solve_concurrency,
+    )
+    .await;
 }
 
 #[cfg(test)]

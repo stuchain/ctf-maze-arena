@@ -72,6 +72,16 @@ impl ApiError {
                 "database_unavailable",
                 "The service is temporarily unavailable.".into(),
             ),
+            ServiceError::TooManyRequests => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "active_solve_limit",
+                "Wait for your active solve to finish before starting another.".into(),
+            ),
+            ServiceError::ShuttingDown => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "shutting_down",
+                "The arena is restarting. Retry shortly.".into(),
+            ),
             ServiceError::Internal => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal_error",

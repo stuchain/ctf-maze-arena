@@ -18,6 +18,10 @@ pub enum ServiceError {
     Conflict,
     #[error("service is temporarily unavailable")]
     Unavailable,
+    #[error("too many active solves")]
+    TooManyRequests,
+    #[error("service is shutting down")]
+    ShuttingDown,
     #[error("internal operation failed")]
     Internal,
 }

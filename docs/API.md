@@ -94,23 +94,42 @@ Returns `202 Accepted`. The run is first stored as `queued`, then transitions to
 }
 ```
 
-## WebSocket GET /api/solve/stream?runId=...
+## POST /api/run/:runId/cancel
 
-Connect with query parameter `runId` matching the solve response.
+Explicitly cancel a queued or running solve. Anonymous runs can be cancelled anonymously; authenticated runs require the same GitHub identity that created them.
+
+```json
+{ "cancelled": true }
+```
+
+The operation is idempotent while the retained run is already cancelled. Completed or failed runs reject the invalid state transition.
+
+## WebSocket GET /api/solve/stream?runId=...&afterSequence=...
+
+Connect with `runId` from the solve response. On reconnect, provide the last applied `sequence` as `afterSequence`. Every protocol v1 message contains `type`, `protocolVersion`, `runId`, and a monotonic `sequence`.
 
 **First message** (text JSON):
 
 ```json
-{ "type": "connected", "runId": "..." }
+{
+  "type": "connected",
+  "protocolVersion": 1,
+  "runId": "...",
+  "sequence": 0,
+  "latestSequence": 14
+}
 ```
 
-**Then** (zero or more):
+**Complete state:**
 
 ```json
 {
-  "type": "frame",
-  "data": {
-    "t": 0,
+  "type": "snapshot",
+  "protocolVersion": 1,
+  "runId": "...",
+  "sequence": 1,
+  "state": {
+    "step": 1,
     "frontier": [[0, 0]],
     "visited": [[0, 0]],
     "current": [0, 0]
@@ -118,27 +137,46 @@ Connect with query parameter `runId` matching the solve response.
 }
 ```
 
-(`current` may be omitted.)
+**Incremental state:**
+
+```json
+{
+  "type": "delta",
+  "protocolVersion": 1,
+  "runId": "...",
+  "sequence": 2,
+  "delta": {
+    "step": 2,
+    "frontierAdded": [[1, 0]],
+    "frontierRemoved": [[0, 0]],
+    "visitedAdded": [[1, 0]],
+    "current": [1, 0]
+  }
+}
+```
+
+`current` may be omitted. If retained deltas no longer cover `afterSequence`, the server sends a current snapshot. Heartbeats repeat the latest sequence and do not modify visual state.
 
 **Final success:**
 
 ```json
 {
-  "type": "finished",
+  "type": "completed",
+  "protocolVersion": 1,
+  "runId": "...",
+  "sequence": 15,
   "path": [[0, 0], [1, 0]],
   "stats": { "visited": 42, "cost": 10, "ms": 1 }
 }
 ```
 
-**Error** (e.g. unknown run):
+Terminal failure and cancellation messages use `failed` and `cancelled`. A `failed` message contains stable `code` and safe `message` fields. `stream_expired` directs the client to `GET /api/run/:runId` and the persisted replay.
 
-```json
-{ "type": "error", "error": "unknown or completed runId" }
-```
+The full schema and resume rules are documented in [Realtime protocol v1](v0.1/realtime-protocol-v1.md).
 
 ## GET /api/replay/:runId
 
-Returns stored replay JSON (camelCase): `mazeId`, `solver`, `seed`, `frames`, `path`, `stats`.
+Returns the versioned replay JSON (camelCase): `protocolVersion`, `mazeId`, `solver`, `seed`, `events`, `path`, and `stats`. Events are protocol-compatible `snapshot` and `delta` records. Expired replays return `404`.
 
 ## GET /api/run/:runId
 
