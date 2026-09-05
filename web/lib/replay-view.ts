@@ -34,6 +34,7 @@ const replaySchema = z.object({
     visited: boundedInteger,
     cost: boundedInteger,
     ms: boundedInteger,
+    peakFrontier: boundedInteger.default(0),
   }),
 });
 

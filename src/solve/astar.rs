@@ -58,6 +58,7 @@ impl Solver for AstarSolver {
             f: h(maze.start),
             cell: maze.start,
         }]);
+        let mut peak_frontier = heap.len();
         let mut step = 0_u32;
 
         while let Some(Item { cell, .. }) = heap.pop() {
@@ -82,6 +83,7 @@ impl Solver for AstarSolver {
                             f: g_next + h(next),
                             cell: next,
                         });
+                        peak_frontier = peak_frontier.max(heap.len());
                     }
                 }
             }
@@ -111,6 +113,7 @@ impl Solver for AstarSolver {
                 visited: visited.len(),
                 cost,
                 ms,
+                peak_frontier,
             },
         })
     }

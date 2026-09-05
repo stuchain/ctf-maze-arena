@@ -13,6 +13,7 @@ import {
   type StreamState,
   type StreamStatus,
   type VisualState,
+  replayStates,
 } from '@/lib/realtime';
 
 export type { SolveStats, StreamStatus } from '@/lib/realtime';
@@ -47,7 +48,7 @@ type Action =
   | { type: 'reset'; runId: string }
   | { type: 'status'; status: StreamStatus }
   | { type: 'message'; message: unknown }
-  | { type: 'replay'; path: [number, number][]; stats: SolveStats | null }
+  | { type: 'replay'; path: [number, number][]; stats: SolveStats | null; frames: VisualState[] }
   | { type: 'cancelled' }
   | { type: 'failure'; message: string };
 
@@ -61,7 +62,7 @@ function reducer(state: ClientStreamState, action: Action): ClientStreamState {
       const frames = appendBoundedFrame(state.frames, next.visual);
       return { ...next, frames };
     }
-    case 'replay': return { ...state, status: 'completed', path: action.path, stats: action.stats, error: null };
+    case 'replay': return { ...state, status: 'completed', path: action.path, stats: action.stats, frames: action.frames.length ? action.frames.slice(-LIVE_FRAME_CAPACITY) : state.frames, error: null };
     case 'cancelled': return { ...state, status: 'cancelled', error: null };
     case 'failure': return { ...state, status: 'failed', error: action.message };
   }
@@ -73,7 +74,7 @@ function normalizeCell(value: unknown): [number, number] {
 function normalizeStats(value: unknown): SolveStats | null {
   if (!value || typeof value !== 'object') return null;
   const item = value as Record<string, unknown>;
-  return { visited: Number(item.visited ?? 0), cost: Number(item.cost ?? 0), ms: Number(item.ms ?? 0) };
+  return { visited: Number(item.visited ?? 0), cost: Number(item.cost ?? 0), ms: Number(item.ms ?? 0), peakFrontier: Number(item.peakFrontier ?? 0) };
 }
 
 export function useSolveStream(runId: string | null, solver: string | null): UseSolveStreamResult {
@@ -112,9 +113,10 @@ export function useSolveStream(runId: string | null, solver: string | null): Use
                 const replay = (await response.json()) as Record<string, unknown>;
                 const path = Array.isArray(replay.path) ? replay.path.map(normalizeCell) : [];
                 const resultStats = normalizeStats(replay.stats);
+                const replayFrames = replayStates(Array.isArray(replay.events) ? replay.events : []);
                 if (resultStats) checkAndAward({ ...resultStats, solver: solver ?? '' });
                 terminal = true;
-                dispatch({ type: 'replay', path, stats: resultStats });
+                dispatch({ type: 'replay', path, stats: resultStats, frames: replayFrames });
                 return true;
               }
             }
@@ -144,6 +146,7 @@ export function useSolveStream(runId: string | null, solver: string | null): Use
             const resultStats = normalizeStats(message.stats);
             if (resultStats) checkAndAward({ ...resultStats, solver: solver ?? '' });
             terminal = true;
+            void finishFromReplay();
           } else if (message.type === 'failed') {
             if (message.code === 'stream_expired') {
               void finishFromReplay().then((finished) => {

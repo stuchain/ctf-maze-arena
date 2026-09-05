@@ -25,6 +25,12 @@ pub(super) struct GenerateRequest {
     pub h: usize,
     pub seed: u64,
     pub algo: String,
+    #[serde(default = "default_feature_preset", rename = "featurePreset")]
+    pub feature_preset: String,
+}
+
+fn default_feature_preset() -> String {
+    "classic".to_string()
 }
 
 #[derive(Debug, Serialize)]
@@ -45,6 +51,28 @@ pub(super) struct SolveRequest {
 #[serde(rename_all = "camelCase")]
 pub(super) struct SolveResponse {
     pub run_id: Uuid,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct RaceRequest {
+    pub maze_id: String,
+    pub solvers: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct RaceRunResponse {
+    pub solver: String,
+    pub run_id: Uuid,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct RaceResponse {
+    pub race_id: Uuid,
+    pub runs: Vec<RaceRunResponse>,
+    pub execution_mode: &'static str,
 }
 
 #[derive(Debug, Serialize)]

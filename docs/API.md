@@ -41,11 +41,12 @@ Returns `201 Created`.
   "w": 10,
   "h": 10,
   "seed": 42,
-  "algo": "KRUSKAL"
+  "algo": "KRUSKAL",
+  "featurePreset": "classic"
 }
 ```
 
-`algo` is one of `KRUSKAL`, `PRIM`, `DFS` (see backend validation).
+`algo` is one of `KRUSKAL`, `PRIM`, `DFS`. `featurePreset` is optional and is either `classic` (default) or `keys`; the latter deterministically places one key before a locked passage on the generated solution route.
 
 **Response** (camelCase):
 
@@ -93,6 +94,30 @@ Returns `202 Accepted`. The run is first stored as `queued`, then transitions to
   "runId": "uuid-string"
 }
 ```
+
+## POST /api/race
+
+Atomically validates a bounded set of two to four unique solvers, clones the same stored maze for every competitor, and starts their runs under one per-actor race lease. Every run uses the global compute semaphore; the default deployment therefore measures competitors sequentially while the client presents synchronized logical playback.
+
+```json
+{ "mazeId": "...", "solvers": ["BFS", "DFS", "ASTAR"] }
+```
+
+Returns `202 Accepted`:
+
+```json
+{
+  "raceId": "...",
+  "executionMode": "sequential_compute_synchronized_playback",
+  "runs": [
+    { "solver": "BFS", "runId": "..." },
+    { "solver": "DFS", "runId": "..." },
+    { "solver": "ASTAR", "runId": "..." }
+  ]
+}
+```
+
+Each run uses the normal stream, replay, status, and cancellation APIs.
 
 ## POST /api/run/:runId/cancel
 
@@ -166,7 +191,7 @@ Connect with `runId` from the solve response. On reconnect, provide the last app
   "runId": "...",
   "sequence": 15,
   "path": [[0, 0], [1, 0]],
-  "stats": { "visited": 42, "cost": 10, "ms": 1 }
+  "stats": { "visited": 42, "cost": 10, "ms": 1, "peakFrontier": 8 }
 }
 ```
 

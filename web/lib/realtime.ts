@@ -17,7 +17,7 @@ export interface VisualState {
   current?: [number, number];
 }
 
-export interface SolveStats { visited: number; cost: number; ms: number }
+export interface SolveStats { visited: number; cost: number; ms: number; peakFrontier: number }
 
 export interface StreamState {
   runId: string | null;
@@ -48,7 +48,7 @@ function visual(value: unknown): VisualState {
 function stats(value: unknown): SolveStats | null {
   if (!value || typeof value !== 'object') return null;
   const item = value as Record<string, unknown>;
-  return { visited: Number(item.visited ?? 0), cost: Number(item.cost ?? 0), ms: Number(item.ms ?? 0) };
+  return { visited: Number(item.visited ?? 0), cost: Number(item.cost ?? 0), ms: Number(item.ms ?? 0), peakFrontier: Number(item.peakFrontier ?? 0) };
 }
 function key(value: [number, number]) { return `${value[0]}:${value[1]}`; }
 

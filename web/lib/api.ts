@@ -85,6 +85,12 @@ export const dailyResponseSchema = z.object({
 
 export const solveResponseSchema = z.object({ runId: z.string().min(1) });
 
+export const raceResponseSchema = z.object({
+  raceId: z.string().min(1),
+  executionMode: z.literal('sequential_compute_synchronized_playback'),
+  runs: z.array(z.object({ solver: z.string().min(1), runId: z.string().min(1) })).min(2).max(4),
+});
+
 export const cancelResponseSchema = z.object({ cancelled: z.boolean() });
 
 export const leaderboardSubmitResponseSchema = z.object({

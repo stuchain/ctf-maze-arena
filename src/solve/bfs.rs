@@ -28,6 +28,7 @@ impl Solver for BfsSolver {
         let mut visited = HashSet::new();
         let mut parent: HashMap<Cell, Cell> = HashMap::new();
         let mut queue = VecDeque::from([maze.start]);
+        let mut peak_frontier = queue.len();
         let mut t = 0_u32;
 
         while let Some(cell) = queue.pop_front() {
@@ -43,6 +44,7 @@ impl Solver for BfsSolver {
                     if !visited.contains(&next) && !parent.contains_key(&next) {
                         parent.insert(next, cell);
                         queue.push_back(next);
+                        peak_frontier = peak_frontier.max(queue.len());
                     }
                 }
             }
@@ -70,6 +72,7 @@ impl Solver for BfsSolver {
                 visited: visited.len(),
                 cost,
                 ms,
+                peak_frontier,
             },
         })
     }

@@ -162,17 +162,33 @@ pub async fn create_run(
     request_id: &str,
     identity: Option<&Identity>,
 ) -> Result<RunId, StoreError> {
+    Ok(create_runs(pool, maze_id, &[solver], request_id, identity)
+        .await?
+        .remove(0))
+}
+
+pub async fn create_runs(
+    pool: &PgPool,
+    maze_id: MazeId,
+    solvers: &[&str],
+    request_id: &str,
+    identity: Option<&Identity>,
+) -> Result<Vec<RunId>, StoreError> {
     let mut tx = pool.begin().await?;
     let owner_user_id = match identity {
         Some(identity) => Some(upsert_user(&mut tx, identity).await?),
         None => None,
     };
-    let id = Uuid::new_v4();
-    sqlx::query("INSERT INTO runs (id, maze_id, owner_user_id, solver, status, request_id) VALUES ($1, $2, $3, $4, 'queued', $5)")
-        .bind(id).bind(maze_id).bind(owner_user_id).bind(solver).bind(request_id)
-        .execute(&mut *tx).await?;
+    let mut ids = Vec::with_capacity(solvers.len());
+    for solver in solvers {
+        let id = Uuid::new_v4();
+        sqlx::query("INSERT INTO runs (id, maze_id, owner_user_id, solver, status, request_id) VALUES ($1, $2, $3, $4, 'queued', $5)")
+            .bind(id).bind(maze_id).bind(owner_user_id).bind(solver).bind(request_id)
+            .execute(&mut *tx).await?;
+        ids.push(id);
+    }
     tx.commit().await?;
-    Ok(id)
+    Ok(ids)
 }
 
 pub async fn transition_to_running(pool: &PgPool, run_id: RunId) -> Result<(), StoreError> {
@@ -196,13 +212,14 @@ pub async fn complete_run(
     let payload = serde_json::to_value(replay)?;
     let mut tx = pool.begin().await?;
     let result = sqlx::query(
-        r#"UPDATE runs SET status = 'completed', visited = $2, cost = $3, duration_ms = $4,
+        r#"UPDATE runs SET status = 'completed', visited = $2, cost = $3, duration_ms = $4, peak_frontier = $5,
            completed_at = NOW() WHERE id = $1 AND status = 'running'"#,
     )
     .bind(run_id)
     .bind(i64::try_from(stats.visited).map_err(|_| StoreError::NumericOverflow)?)
     .bind(i64::try_from(stats.cost).map_err(|_| StoreError::NumericOverflow)?)
     .bind(i64::try_from(stats.ms).map_err(|_| StoreError::NumericOverflow)?)
+    .bind(i64::try_from(stats.peak_frontier).map_err(|_| StoreError::NumericOverflow)?)
     .execute(&mut *tx)
     .await?;
     if result.rows_affected() != 1 {
@@ -312,13 +329,14 @@ pub async fn get_run(pool: &PgPool, run_id: RunId) -> Result<Option<RunMetadata>
         Option<i64>,
         Option<i64>,
         Option<i64>,
+        Option<i64>,
         Option<String>,
         DateTime<Utc>,
         Option<DateTime<Utc>>,
         Option<DateTime<Utc>>,
     );
     let row: Option<Row> = sqlx::query_as(
-        r#"SELECT id, maze_id, solver, status, visited, cost, duration_ms, error_code,
+        r#"SELECT id, maze_id, solver, status, visited, cost, duration_ms, peak_frontier, error_code,
            created_at, started_at, completed_at FROM runs WHERE id = $1"#,
     )
     .bind(run_id)
@@ -333,17 +351,20 @@ pub async fn get_run(pool: &PgPool, run_id: RunId) -> Result<Option<RunMetadata>
             visited,
             cost,
             duration_ms,
+            peak_frontier,
             error_code,
             created_at,
             started_at,
             completed_at,
         )| {
             let status = status.parse().map_err(|_| StoreError::InvalidTransition)?;
-            let stats = match (visited, cost, duration_ms) {
-                (Some(visited), Some(cost), Some(ms)) => Some(SolveStats {
+            let stats = match (visited, cost, duration_ms, peak_frontier) {
+                (Some(visited), Some(cost), Some(ms), Some(peak_frontier)) => Some(SolveStats {
                     visited: usize::try_from(visited).map_err(|_| StoreError::NumericOverflow)?,
                     cost: usize::try_from(cost).map_err(|_| StoreError::NumericOverflow)?,
                     ms: u64::try_from(ms).map_err(|_| StoreError::NumericOverflow)?,
+                    peak_frontier: usize::try_from(peak_frontier)
+                        .map_err(|_| StoreError::NumericOverflow)?,
                 }),
                 _ => None,
             };

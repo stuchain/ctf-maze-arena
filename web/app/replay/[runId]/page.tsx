@@ -106,7 +106,7 @@ function ReplayReady({ replay, mazeJson, frames, shareStatus, onShare }: {
           <h1>Solve replay</h1>
           <p className="replay-meta">
             <span><b>Solver</b> {replay.solver.toUpperCase()}</span><span><b>Visited</b> {formatter.format(replay.stats.visited)}</span>
-            <span><b>Cost</b> {formatter.format(replay.stats.cost)}</span><span><b>Time</b> {formatter.format(replay.stats.ms)} ms</span>
+            <span><b>Cost</b> {formatter.format(replay.stats.cost)}</span><span><b>Peak frontier</b> {formatter.format(replay.stats.peakFrontier)}</span><span><b>Time</b> {formatter.format(replay.stats.ms)} ms</span>
           </p>
         </div>
         <div className="replay-actions">

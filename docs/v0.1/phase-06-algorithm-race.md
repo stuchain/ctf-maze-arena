@@ -1,6 +1,8 @@
 # Phase 6 — Algorithm Race
 
-**Status:** ready
+**Status:** complete
+
+**Completed:** 2026-09-05
 
 **Depends on:** Phase 5
 
@@ -59,14 +61,14 @@ For each generator and solver, document mechanism, time/space complexity, comple
 
 ## Work checklist
 
-- [ ] Define race request/result and shareable configuration schemas.
-- [ ] Implement fair orchestration and resource/concurrency policy.
-- [ ] Build overview, side-by-side, and results-analysis modes.
-- [ ] Add synchronized playback and independent inspection controls.
-- [ ] Add peak-frontier and relevant metrics with clear definitions.
-- [ ] Add deterministic result explanations and algorithm education panels.
-- [ ] Add canonical share URLs and result/replay integration.
-- [ ] Correct and expand algorithm documentation.
+- [x] Define race request/result and shareable configuration schemas.
+- [x] Implement fair orchestration and resource/concurrency policy.
+- [x] Build overview, side-by-side, and results-analysis modes.
+- [x] Add synchronized playback and independent inspection controls.
+- [x] Add peak-frontier and relevant metrics with clear definitions.
+- [x] Add deterministic result explanations and algorithm education panels.
+- [x] Add canonical share URLs and result/replay integration.
+- [x] Correct and expand algorithm documentation.
 
 ## Test strategy
 
@@ -85,20 +87,25 @@ For each generator and solver, document mechanism, time/space complexity, comple
 
 ## Exit criteria
 
-- [ ] A visitor can run and understand a multi-solver comparison without documentation.
-- [ ] Fairness, timing, and algorithm guarantees are accurate and tested.
-- [ ] Shared race URLs recreate the same configuration and results semantics.
-- [ ] The experience remains responsive across target viewports and maze sizes.
-- [ ] Algorithm documentation matches implementation and accepted theory.
+- [x] A visitor can run and understand a multi-solver comparison without documentation.
+- [x] Fairness, timing, and algorithm guarantees are accurate and tested.
+- [x] Shared race URLs recreate the same configuration and results semantics.
+- [x] The experience remains responsive across target viewports and maze sizes.
+- [x] Algorithm documentation matches implementation and accepted theory.
 
 ## Verification record
 
 | Date | Change | Evidence |
 |---|---|---|
-| — | Not implemented | — |
+| 2026-09-05 | Race API, sequential fair orchestration, per-actor group limits, immutable maze clones, peak-frontier persistence, and deterministic key preset | Rust unit/property coverage plus real PostgreSQL migration/HTTP/lifecycle integration tests |
+| 2026-09-05 | Overview and two-to-four-stage inspection, synchronized logical-step playback, live lanes, analysis table, deterministic explanations, replay links, versioned canonical URLs, and responsive education UI | 24 frontend unit tests, strict lint/typecheck/build, full Playwright suite including desktop share/reload and mobile DP Keys race |
+| 2026-09-05 | Cross-stack verification | `./scripts/verify.ps1 -Scope all`; `cargo test --all-targets --all-features`; PostgreSQL integration tests with `TEST_DATABASE_URL`; `npm run test:e2e -- --workers=1` |
 
 ## Decision and deviation log
 
 | Date | Decision or deviation | Consequence |
 |---|---|---|
 | 2026-09-02 | Algorithm Race is the non-negotiable signature feature. | Lower-priority community scope may be reduced before this phase is compromised. |
+| 2026-09-05 | Measure race solvers sequentially under the existing global compute semaphore and synchronize only logical playback. | Competitors do not intentionally contend for the free host CPU; runtime remains labeled as observational rather than a rigorous benchmark. |
+| 2026-09-05 | Use optimized SVG for up to four stages, hiding non-selected stages on mobile. | Phase 5 performance/accessibility characteristics are retained while constrained screens stay legible. |
+| 2026-09-05 | Add a deterministic keys preset and gate DP Keys selection to it. | Key-aware search is demonstrable without implying direct metric comparability with cell-only solvers. |

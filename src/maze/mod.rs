@@ -147,7 +147,7 @@ impl Walls {
 }
 
 /// Maze: grid + walls + start and goal cells.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Maze {
     pub grid: Grid,
     pub walls: Walls,

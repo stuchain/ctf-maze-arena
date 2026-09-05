@@ -139,6 +139,7 @@ fn dummy_replay(maze_id: Uuid, stats: &SolveStats) -> Replay {
             visited: stats.visited,
             cost: stats.cost,
             ms: stats.ms,
+            peak_frontier: stats.peak_frontier,
         },
     }
 }
@@ -172,6 +173,7 @@ impl Solver for SlowSolver {
                 visited: 0,
                 cost: 0,
                 ms: 75,
+                peak_frontier: 1,
             },
         }
     }
@@ -189,6 +191,7 @@ impl Solver for CancellableSolver {
                 visited: 200,
                 cost: 0,
                 ms: 400,
+                peak_frontier: 1,
             },
         }
     }
@@ -460,6 +463,55 @@ async fn phase_02_postgres_http_and_lifecycle_contracts() {
     assert_eq!(generated["maze"]["grid"]["width"], 7);
     assert!(store::get_maze(&pool, maze_id).await.unwrap().is_some());
 
+    let (status, invalid_race) = call(
+        &app,
+        request(
+            "POST",
+            "/api/race",
+            Some(json!({"mazeId": maze_id, "solvers": ["BFS", "BFS"]})),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(invalid_race["error"]["code"], "invalid_race");
+
+    let (status, race) = call(
+        &app,
+        request(
+            "POST",
+            "/api/race",
+            Some(json!({"mazeId": maze_id, "solvers": ["BFS", "DFS", "ASTAR"]})),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(
+        race["executionMode"],
+        "sequential_compute_synchronized_playback"
+    );
+    assert_eq!(race["runs"].as_array().unwrap().len(), 3);
+    for run in race["runs"].as_array().unwrap() {
+        let run_id = Uuid::parse_str(run["runId"].as_str().unwrap()).unwrap();
+        let completed = wait_for_status(&pool, run_id, RunStatus::Completed).await;
+        assert!(completed.stats.unwrap().peak_frontier > 0);
+    }
+
+    let (status, keys_maze) = call(
+        &app,
+        request(
+            "POST",
+            "/api/maze/generate",
+            Some(json!({"w": 9, "h": 9, "seed": 42, "algo": "KRUSKAL", "featurePreset": "keys"})),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(keys_maze["maze"]["keys"].as_array().unwrap().len(), 1);
+    assert_eq!(keys_maze["maze"]["doors"].as_array().unwrap().len(), 1);
+
     // Anonymous play is durable but cannot enter the authenticated leaderboard.
     let (status, anonymous) = call(
         &app,
@@ -600,6 +652,7 @@ async fn phase_02_postgres_http_and_lifecycle_contracts() {
         visited: 10,
         cost: 5,
         ms: 3,
+        peak_frontier: 2,
     };
     store::complete_run(&pool, queued, &stats, &dummy_replay(maze_id, &stats))
         .await

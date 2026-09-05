@@ -527,6 +527,7 @@ mod tests {
                 visited: 4,
                 cost: 1,
                 ms: 1,
+                peak_frontier: 2,
             },
         );
         let resumed = stream.resume(0);

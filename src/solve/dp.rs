@@ -55,6 +55,7 @@ impl Solver for DpKeysSolver {
         let mut parent: HashMap<DpState, DpState> = HashMap::new();
         let init = DpState::initial(maze.start);
         let mut queue = VecDeque::from([init]);
+        let mut peak_frontier = queue.len();
         let mut goal_state = None;
         let mut step = 0_u32;
 
@@ -84,6 +85,7 @@ impl Solver for DpKeysSolver {
                     if !visited.contains(&next_state) && !parent.contains_key(&next_state) {
                         parent.insert(next_state, state);
                         queue.push_back(next_state);
+                        peak_frontier = peak_frontier.max(queue.len());
                     }
                 }
             }
@@ -121,6 +123,7 @@ impl Solver for DpKeysSolver {
                 visited: visited.len(),
                 cost,
                 ms,
+                peak_frontier,
             },
         })
     }

@@ -4,14 +4,17 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { Achievements } from '@/components/Achievements';
 import { AppHeader } from '@/components/AppHeader';
+import { AlgorithmGuide } from '@/components/AlgorithmGuide';
 import { GenerateForm, type GenerateFormParams } from '@/components/GenerateForm';
 import { Leaderboard, type LeaderboardEntry } from '@/components/Leaderboard';
 import { MazeGrid, type MazeData } from '@/components/MazeGrid';
 import { PlaybackControls } from '@/components/PlaybackControls';
+import { RaceExperience } from '@/components/RaceExperience';
 import { SolverPicker } from '@/components/SolverPicker';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Badge, Button, Field, Notice, Panel, PanelHeader } from '@/components/ui/Primitives';
 import { useSolveStream, type StreamStatus } from '@/hooks/useSolveStream';
+import { useRaceStreams, type RaceRunMap } from '@/hooks/useRaceStreams';
 import { usePlaybackTimeline } from '@/hooks/usePlaybackTimeline';
 import {
   cancelResponseSchema,
@@ -21,11 +24,13 @@ import {
   leaderboardResponseSchema,
   requestJson,
   solveResponseSchema,
+  raceResponseSchema,
   toErrorMessage,
   tokenResponseSchema,
 } from '@/lib/api';
 import { publicEnv } from '@/lib/env';
 import { backendMazeToMazeData } from '@/lib/maze';
+import { canonicalRaceUrl, DEFAULT_RACE_CONFIG, parseRaceConfig, RACE_SOLVERS, type RaceConfig, type RaceDisplayMode, type RaceSolver } from '@/lib/race';
 
 const API = publicEnv.NEXT_PUBLIC_API_URL;
 const ACTIVE_STATUSES: StreamStatus[] = ['waking', 'connecting', 'live', 'reconnecting'];
@@ -91,6 +96,15 @@ export default function Home() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [submissionStatus, setSubmissionStatus] = useState<string | null>(null);
   const [dailyInfo, setDailyInfo] = useState<{ seed: number; date: string } | null>(null);
+  const [experienceMode, setExperienceMode] = useState<'single' | 'race'>('single');
+  const [raceSolvers, setRaceSolvers] = useState<RaceSolver[]>(DEFAULT_RACE_CONFIG.solvers);
+  const [raceDisplayMode, setRaceDisplayMode] = useState<RaceDisplayMode>('overview');
+  const [raceId, setRaceId] = useState<string | null>(null);
+  const [raceRunIds, setRaceRunIds] = useState<RaceRunMap>({});
+  const [raceLoading, setRaceLoading] = useState(false);
+  const [shareStatus, setShareStatus] = useState<string | null>(null);
+  const [generationConfig, setGenerationConfig] = useState<GenerateFormParams | null>(null);
+  const [formDefaults, setFormDefaults] = useState<GenerateFormParams | null>(null);
 
   useEffect(() => {
     if (!mazeId) {
@@ -106,9 +120,13 @@ export default function Home() {
     status: solveStreamStatus, frames, path: solvePath, stats,
     error: solveStreamError, sequence: solveSequence,
   } = useSolveStream(runId, solver);
+  const raceStreams = useRaceStreams(raceRunIds);
   const playback = usePlaybackTimeline(frames.length, 'live', runId);
   const frame = frames[playback.displayIndex];
   const isActive = ACTIVE_STATUSES.includes(solveStreamStatus);
+  const selectedRaceStreams = raceSolvers.map((candidate) => raceStreams[candidate]);
+  const raceIsActive = Boolean(raceId) && selectedRaceStreams.some((stream) => ACTIVE_STATUSES.includes(stream.status));
+  const raceIsComplete = Boolean(raceId) && selectedRaceStreams.every((stream) => stream.status === 'completed');
 
   const authHeaders = async (): Promise<Record<string, string>> => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -127,6 +145,9 @@ export default function Home() {
     setError(null);
     setRunId(null);
     setSubmissionStatus(null);
+    setRaceId(null);
+    setRaceRunIds({});
+    if (params.featurePreset === 'classic') setRaceSolvers((current) => current.filter((value) => value !== 'DP_KEYS'));
     try {
       const data = await requestJson(`${API}/api/maze/generate`, generateResponseSchema, {
         method: 'POST',
@@ -135,6 +156,7 @@ export default function Home() {
       });
       setMazeId(data.mazeId);
       setMaze(backendMazeToMazeData(data.maze));
+      setGenerationConfig(params);
     } catch (cause: unknown) {
       setError(`${toErrorMessage(cause, 'Could not generate the maze.')} Check the API connection and try again.`);
     } finally {
@@ -147,10 +169,59 @@ export default function Home() {
     try {
       const data = await requestJson(`${API}/api/daily`, dailyResponseSchema);
       setDailyInfo({ seed: data.seed, date: data.date });
-      await handleGenerate({ w: data.w, h: data.h, seed: data.seed, algo: 'KRUSKAL' });
+      await handleGenerate({ w: data.w, h: data.h, seed: data.seed, algo: 'KRUSKAL', featurePreset: 'classic' });
     } catch (cause: unknown) {
       setError(`${toErrorMessage(cause, 'Could not load today’s challenge.')} Try a custom maze instead.`);
     }
+  };
+
+  const currentRaceConfig = (): RaceConfig => ({
+    version: 1,
+    width: generationConfig?.w ?? DEFAULT_RACE_CONFIG.width,
+    height: generationConfig?.h ?? DEFAULT_RACE_CONFIG.height,
+    seed: generationConfig?.seed ?? DEFAULT_RACE_CONFIG.seed,
+    generator: (generationConfig?.algo as RaceConfig['generator']) ?? DEFAULT_RACE_CONFIG.generator,
+    featurePreset: generationConfig?.featurePreset ?? 'classic',
+    solvers: raceSolvers,
+    displayMode: raceDisplayMode,
+  });
+
+  const handleRace = async () => {
+    if (!mazeId || raceLoading || raceSolvers.length < 2) return;
+    setRaceLoading(true); setError(null); setRunId(null); setRaceId(null); setRaceRunIds({});
+    try {
+      const data = await requestJson(`${API}/api/race`, raceResponseSchema, {
+        method: 'POST', headers: await authHeaders(), body: JSON.stringify({ mazeId, solvers: raceSolvers }),
+      });
+      setRaceId(data.raceId);
+      setRaceRunIds(Object.fromEntries(data.runs.map((run) => [run.solver, run.runId])) as RaceRunMap);
+    } catch (cause: unknown) {
+      setError(`${toErrorMessage(cause, 'Could not start the race.')} Check the competitor selection and try again.`);
+    } finally { setRaceLoading(false); }
+  };
+
+  const handleCancelRace = async () => {
+    const headers = await authHeaders();
+    await Promise.allSettled(Object.values(raceRunIds).map((id) => requestJson(
+      `${API}/api/run/${encodeURIComponent(id)}/cancel`, cancelResponseSchema, { method: 'POST', headers },
+    )));
+  };
+
+  const handleShareRace = async () => {
+    if (!generationConfig) { setError('Generate a maze before sharing its race configuration.'); return; }
+    const url = canonicalRaceUrl(currentRaceConfig(), window.location);
+    window.history.replaceState(null, '', url);
+    try { await navigator.clipboard.writeText(url); setShareStatus('Race link copied.'); }
+    catch { setShareStatus('Race URL is ready in the address bar.'); }
+  };
+
+  const handleLoadSharedRace = async () => {
+    const config = parseRaceConfig(new URLSearchParams(window.location.search));
+    if (!config) { setError('This URL does not contain a supported v1 race configuration.'); return; }
+    setExperienceMode('race'); setRaceSolvers(config.solvers); setRaceDisplayMode(config.displayMode);
+    const params = { w: config.width, h: config.height, seed: config.seed, algo: config.generator, featurePreset: config.featurePreset } as const;
+    setFormDefaults(params);
+    await handleGenerate(params);
   };
 
   const handleSolve = async () => {
@@ -228,21 +299,34 @@ export default function Home() {
             </div>
             <Button variant="secondary" size="sm" onClick={() => void handleDaily()} loading={loading}>Load Daily</Button>
           </div>
-          <GenerateForm onSubmit={handleGenerate} loading={loading} />
+          <GenerateForm key={formDefaults ? `${formDefaults.w}:${formDefaults.h}:${formDefaults.seed}:${formDefaults.algo}:${formDefaults.featurePreset}` : 'custom'} initialParams={formDefaults ?? undefined} onSubmit={handleGenerate} loading={loading} />
           <div className="panel-divider" />
-          <Field label="Pathfinding Strategy" htmlFor="solver-picker" hint="A* balances optimal paths with focused exploration.">
+          <fieldset className="experience-picker"><legend>Experience</legend><div className="segmented-control">
+            <button type="button" aria-pressed={experienceMode === 'single'} onClick={() => setExperienceMode('single')}>Single Solver</button>
+            <button type="button" aria-pressed={experienceMode === 'race'} onClick={() => setExperienceMode('race')}>Algorithm Race</button>
+          </div></fieldset>
+          {experienceMode === 'single' ? <Field label="Pathfinding Strategy" htmlFor="solver-picker" hint="A* balances optimal paths with focused exploration.">
             <SolverPicker value={solver} onChange={setSolver} id="solver-picker" describedBy="solver-picker-description" />
-          </Field>
+          </Field> : <div className="race-configuration">
+            <fieldset><legend>Competitors <small>Choose 2–4</small></legend>{RACE_SOLVERS.map((candidate) => {
+              const incompatible = candidate === 'DP_KEYS' && generationConfig?.featurePreset !== 'keys';
+              return <label key={candidate}><input type="checkbox" checked={raceSolvers.includes(candidate)} disabled={incompatible} onChange={() => setRaceSolvers((current) => current.includes(candidate) ? current.filter((value) => value !== candidate) : [...current, candidate])} />{candidate.replace('_', ' ')}{incompatible ? ' (keys preset only)' : ''}</label>;
+            })}</fieldset>
+            <fieldset><legend>Display</legend><div className="segmented-control"><button type="button" aria-pressed={raceDisplayMode === 'overview'} onClick={() => setRaceDisplayMode('overview')}>Overview</button><button type="button" aria-pressed={raceDisplayMode === 'side-by-side'} onClick={() => setRaceDisplayMode('side-by-side')}>Side by Side</button></div></fieldset>
+            <Button type="button" variant="secondary" onClick={() => void handleLoadSharedRace()}>Load Race from URL</Button>
+            <Button type="button" variant="secondary" onClick={() => void handleShareRace()}>Share Configuration</Button>
+            {shareStatus ? <small role="status">{shareStatus}</small> : null}
+          </div>}
         </Panel>
 
         <Panel id="arena" className="arena-panel">
           <div className="arena-heading">
-            <div><p className="eyebrow">02 · Live Arena</p><h1>Watch the Search Unfold</h1></div>
-            <Badge tone={statusTone(solveStreamStatus)} pulse={isActive}>{STATUS_LABELS[solveStreamStatus]}</Badge>
+            <div><p className="eyebrow">02 · Live Arena</p><h1>{experienceMode === 'race' ? 'Compare Every Decision' : 'Watch the Search Unfold'}</h1></div>
+            {experienceMode === 'race' ? <Badge tone={raceIsComplete ? 'success' : raceIsActive ? 'info' : 'neutral'} pulse={raceIsActive}>{raceIsComplete ? 'Race Complete' : raceIsActive ? 'Race Live' : 'Race Ready'}</Badge> : <Badge tone={statusTone(solveStreamStatus)} pulse={isActive}>{STATUS_LABELS[solveStreamStatus]}</Badge>}
           </div>
           {error ? <Notice title="Action Needed" tone="danger">{error}</Notice> : null}
           {solveStreamError ? <Notice title="Stream Interrupted" tone="warning">{solveStreamError}</Notice> : null}
-          <div className="stage-shell">
+          {experienceMode === 'race' && maze && raceId ? <RaceExperience maze={maze} config={currentRaceConfig()} raceId={raceId} runIds={raceRunIds} streams={raceStreams} onCancel={() => void handleCancelRace()} /> : <><div className="stage-shell">
             <div className="stage-grid" aria-hidden="true" />
             <MazeGrid
               key={mazeId ?? 'empty'}
@@ -250,7 +334,7 @@ export default function Home() {
               current={frame?.current} path={solveStreamStatus === 'completed' && playback.atEnd ? solvePath : undefined}
             />
           </div>
-          {frames.length ? (
+          {experienceMode === 'single' && frames.length ? (
             <PlaybackControls
               mode="live" totalFrames={frames.length} currentIndex={playback.displayIndex}
               playing={playback.playing} followLive={playback.followLive} speed={playback.speed}
@@ -258,24 +342,28 @@ export default function Home() {
               onPrevious={playback.previous} onNext={playback.next} onGoLive={playback.goLive}
               onIndexChange={playback.setIndex} onSpeedChange={playback.setSpeed}
             />
-          ) : null}
+          ) : null}</>}
           <div className="arena-toolbar">
             <MazeLegend />
             <div className="arena-actions">
-              {isActive ? <Button variant="destructive" onClick={() => setConfirmCancel(true)}>Cancel Run</Button> : null}
-              <Button
+              {experienceMode === 'single' && isActive ? <Button variant="destructive" onClick={() => setConfirmCancel(true)}>Cancel Run</Button> : null}
+              {experienceMode === 'single' ? <Button
                 onClick={() => void handleSolve()} disabled={!mazeId || isActive}
                 loading={solveLoading} data-testid="solve-button"
               >
                 {solveLoading ? 'Starting Solver…' : solveStreamStatus === 'completed' ? 'Run Again' : 'Start Solver'}
-              </Button>
+              </Button> : <Button onClick={() => void handleRace()} disabled={!mazeId || raceSolvers.length < 2} loading={raceLoading} data-testid="race-button">{raceLoading ? 'Starting Race…' : raceId ? 'Race Again' : 'Start Algorithm Race'}</Button>}
             </div>
           </div>
         </Panel>
 
         <Panel as="aside" id="inspector" className="inspector-panel">
           <PanelHeader eyebrow="03 · Inspect" title="Run Telemetry" description="Live signals from the active search." />
-          <div
+          {experienceMode === 'race' ? <div className="run-status" data-testid="race-inspector" role="status" aria-live="polite">
+            <div className="run-status__line"><span>Race</span><strong>{raceIsComplete ? 'analysis ready' : raceIsActive ? 'in progress' : 'configured'}</strong></div>
+            <div className="metric-grid"><Metric label="Competitors" value={raceSolvers.length} /><Metric label="Display" value={raceDisplayMode === 'overview' ? 'Overview' : 'Side by side'} /><Metric label="Compute" value="Sequential" /><Metric label="Playback" value="Synchronized" /></div>
+            <p className="solver-guarantee"><strong>Fairness contract</strong>Each solver receives an equivalent clone of the same immutable maze. Runtime is measured one solver at a time.</p>
+          </div> : <div
             className="run-status" data-testid="stream-status"
             role={solveStreamError ? 'alert' : 'status'}
             aria-live={solveStreamError ? 'assertive' : 'polite'}
@@ -288,10 +376,11 @@ export default function Home() {
               <Metric label="Visited" value={stats?.visited.toLocaleString() ?? frame?.visited.length.toLocaleString() ?? '—'} />
               <Metric label="Path Cost" value={stats?.cost ?? '—'} />
               <Metric label="Runtime" value={stats ? `${stats.ms} ms` : '—'} />
+              <Metric label="Peak Frontier" value={stats?.peakFrontier ?? '—'} />
               <Metric label="Solver" value={solver.replace('_', ' ')} />
             </div>
             <p className="solver-guarantee"><strong>Guarantee</strong>{SOLVER_GUARANTEES[solver] ?? 'Solver-specific result'}</p>
-          </div>
+          </div>}
           {solveStreamStatus === 'completed' && authStatus === 'authenticated' ? (
             <Button className="button--full" variant="secondary" onClick={() => void handleSubmitScore()} loading={submissionStatus === 'Submitting score…'}>
               Submit Ranked Score
@@ -309,11 +398,7 @@ export default function Home() {
           <PanelHeader eyebrow="Community" title="Maze Leaderboard" description="Ranked by path cost, runtime, then explored cells." />
           <Leaderboard entries={leaderboard} />
         </Panel>
-        <Panel className="concept-panel">
-          <PanelHeader eyebrow="Algorithm Note" title="Why A* Feels Focused" description="A* combines distance travelled with a heuristic estimate to prioritize promising cells." />
-          <div className="formula" translate="no"><span>f(n)</span><b>=</b><span>g(n)</span><b>+</b><span>h(n)</span></div>
-          <div className="formula-key"><span><i>g</i> Known cost from start</span><span><i>h</i> Estimated cost to goal</span></div>
-        </Panel>
+        <AlgorithmGuide />
       </section>
 
       <footer className="app-footer"><span>Built to make algorithm behavior visible.</span><span translate="no">Protocol v1 · Deterministic Replays</span></footer>

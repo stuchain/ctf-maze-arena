@@ -9,22 +9,25 @@ export interface GenerateFormParams {
   h: number;
   seed: number;
   algo: string;
+  featurePreset: 'classic' | 'keys';
 }
 
 export interface GenerateFormProps {
   onSubmit: (params: GenerateFormParams) => void;
   loading?: boolean;
+  initialParams?: GenerateFormParams;
 }
 
-export function GenerateForm({ onSubmit, loading }: GenerateFormProps) {
-  const [w, setW] = useState(10);
-  const [h, setH] = useState(10);
-  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e6));
-  const [algo, setAlgo] = useState('KRUSKAL');
+export function GenerateForm({ onSubmit, loading, initialParams }: GenerateFormProps) {
+  const [w, setW] = useState(initialParams?.w ?? 10);
+  const [h, setH] = useState(initialParams?.h ?? 10);
+  const [seed, setSeed] = useState(() => initialParams?.seed ?? Math.floor(Math.random() * 1e6));
+  const [algo, setAlgo] = useState(initialParams?.algo ?? 'KRUSKAL');
+  const [featurePreset, setFeaturePreset] = useState<'classic' | 'keys'>(initialParams?.featurePreset ?? 'classic');
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    onSubmit({ w, h, seed, algo });
+    onSubmit({ w, h, seed, algo, featurePreset });
   };
 
   return (
@@ -92,6 +95,13 @@ export function GenerateForm({ onSubmit, loading }: GenerateFormProps) {
           <option value="KRUSKAL">Kruskal</option>
           <option value="PRIM">Prim</option>
           <option value="DFS">Depth-First Search</option>
+        </Select>
+      </Field>
+
+      <Field label="Maze Features" htmlFor="maze-feature-select" hint="Keys adds a deterministic key and locked passage.">
+        <Select id="maze-feature-select" value={featurePreset} onChange={(event) => setFeaturePreset(event.target.value as 'classic' | 'keys')}>
+          <option value="classic">Classic passages</option>
+          <option value="keys">Key &amp; locked passage</option>
         </Select>
       </Field>
 

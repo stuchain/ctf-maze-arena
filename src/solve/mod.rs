@@ -24,6 +24,8 @@ pub struct SolveStats {
     pub visited: usize,
     pub cost: usize,
     pub ms: u64,
+    #[serde(default)]
+    pub peak_frontier: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,6 +134,7 @@ impl Solver for StubSolver {
                 visited: 0,
                 cost: 0,
                 ms: 0,
+                peak_frontier: 0,
             },
         }
     }

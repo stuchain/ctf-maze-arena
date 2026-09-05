@@ -8,6 +8,8 @@ pub struct ReplayStats {
     pub visited: usize,
     pub cost: usize,
     pub ms: u64,
+    #[serde(default)]
+    pub peak_frontier: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,6 +44,7 @@ pub fn build_replay(
         visited: result.stats.visited,
         cost: result.stats.cost,
         ms: result.stats.ms,
+        peak_frontier: result.stats.peak_frontier,
     };
 
     Replay {
@@ -84,6 +87,7 @@ mod tests {
                 visited: 10,
                 cost: 1,
                 ms: 2,
+                peak_frontier: 4,
             },
         };
 
@@ -120,6 +124,7 @@ mod tests {
                 visited: 0,
                 cost: 0,
                 ms: 0,
+                peak_frontier: 0,
             },
         };
 

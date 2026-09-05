@@ -53,10 +53,16 @@ pub(super) async fn generate(
     payload: Result<Json<GenerateRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<GenerateResponse>), ApiError> {
     let Json(request) = payload.map_err(|error| ApiError::invalid_json(error, &request_id))?;
-    let (maze_id, maze) =
-        maze::generate_and_store(&state.db, request.w, request.h, request.seed, &request.algo)
-            .await
-            .map_err(|error| ApiError::from_service(error, &request_id))?;
+    let (maze_id, maze) = maze::generate_and_store(
+        &state.db,
+        request.w,
+        request.h,
+        request.seed,
+        &request.algo,
+        &request.feature_preset,
+    )
+    .await
+    .map_err(|error| ApiError::from_service(error, &request_id))?;
     let maze = serde_json::to_value(maze).map_err(|error| {
         tracing::error!(%error, "maze serialization failed");
         ApiError::from_service(ServiceError::Internal, &request_id)
@@ -64,6 +70,99 @@ pub(super) async fn generate(
     Ok((
         StatusCode::CREATED,
         Json(GenerateResponse { maze_id, maze }),
+    ))
+}
+
+pub(super) async fn race(
+    Extension(state): Extension<Arc<AppState>>,
+    Extension(request_id): Extension<String>,
+    claims: Option<Extension<AuthClaims>>,
+    ConnectInfo(peer): ConnectInfo<std::net::SocketAddr>,
+    payload: Result<Json<RaceRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<RaceResponse>), ApiError> {
+    let Json(request) = payload.map_err(|error| ApiError::invalid_json(error, &request_id))?;
+    if !(2..=4).contains(&request.solvers.len()) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_race",
+            "A race requires two to four solvers.",
+            &request_id,
+        ));
+    }
+    let mut unique = std::collections::HashSet::new();
+    if request
+        .solvers
+        .iter()
+        .any(|solver| !unique.insert(solver.as_str()))
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_race",
+            "Race solvers must be unique.",
+            &request_id,
+        ));
+    }
+    let maze_id = parse_uuid(&request.maze_id, "mazeId", &request_id)?;
+    let (maze, maze_seed) = maze::get_with_seed(&state.db, maze_id)
+        .await
+        .map_err(|error| ApiError::from_service(error, &request_id))?;
+    let identity = claims.as_ref().map(|Extension(claims)| Identity {
+        github_subject: claims.sub.clone(),
+        display_name: claims.name.clone(),
+        avatar_url: claims.avatar_url.clone(),
+    });
+    let race_id = Uuid::new_v4();
+    let actor = claims.as_ref().map_or_else(
+        || format!("ip:{}", peer.ip()),
+        |Extension(claims)| format!("user:{}", claims.sub),
+    );
+    let solver_names = request.solvers;
+    let mut starts = Vec::with_capacity(solver_names.len());
+    for solver_name in &solver_names {
+        let solver = state
+            .solvers
+            .get(solver_name.as_str())
+            .cloned()
+            .ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "unknown_solver",
+                    "solver must be BFS, DFS, ASTAR, or DP_KEYS.",
+                    &request_id,
+                )
+            })?;
+        starts.push(run::StartRun {
+            pool: &state.db,
+            streams: &state.stream_broadcasts,
+            concurrency: &state.solve_concurrency,
+            active_limits: &state.active_solve_limits,
+            accepting: &state.accepting_solves,
+            config: &state.realtime_config,
+            actor: actor.clone(),
+            maze_id,
+            maze: maze.clone(),
+            maze_seed,
+            solver_name: solver_name.clone(),
+            solver,
+            request_id: &request_id,
+            identity: identity.as_ref(),
+        });
+    }
+    let run_ids = run::start_race(starts)
+        .await
+        .map_err(|error| ApiError::from_service(error, &request_id))?;
+    let runs = solver_names
+        .into_iter()
+        .zip(run_ids)
+        .map(|(solver, run_id)| RaceRunResponse { solver, run_id })
+        .collect();
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(RaceResponse {
+            race_id,
+            runs,
+            execution_mode: "sequential_compute_synchronized_playback",
+        }),
     ))
 }
 

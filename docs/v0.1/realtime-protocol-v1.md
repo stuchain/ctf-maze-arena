@@ -47,7 +47,7 @@ If the bounded retained history covers the requested gap, the server sends the m
 
 ### Terminal messages
 
-- `completed` includes the final `path` and authoritative `stats` (`visited`, `cost`, `ms`).
+- `completed` includes the final `path` and authoritative `stats` (`visited`, `cost`, compute `ms`, and `peakFrontier`).
 - `failed` includes a stable `code` and user-safe `message`.
 - `cancelled` acknowledges explicit cancellation or shutdown interruption.
 

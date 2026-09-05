@@ -49,3 +49,35 @@ fn bfs_registered_in_default_registry() {
     let solver = registry.get("BFS").expect("BFS solver missing");
     let _ = solver.solve(&maze);
 }
+
+#[test]
+fn bfs_and_astar_optimality_holds_across_deterministic_generators_and_seeds() {
+    for algorithm in [
+        GeneratorAlgo::Kruskal,
+        GeneratorAlgo::Prim,
+        GeneratorAlgo::Dfs,
+    ] {
+        for seed in 0..64 {
+            let maze = generate(15, 15, seed, algorithm);
+            let bfs = BfsSolver.solve(&maze);
+            let astar = AstarSolver.solve(&maze);
+            assert_eq!(
+                bfs.stats.cost, astar.stats.cost,
+                "algorithm={algorithm:?}, seed={seed}"
+            );
+            assert!(!bfs.path.is_empty());
+            assert!(bfs.stats.peak_frontier > 0);
+            assert!(astar.stats.peak_frontier > 0);
+        }
+    }
+}
+
+#[test]
+fn race_competitors_receive_equivalent_immutable_maze_clones() {
+    let maze = generate(20, 20, 991, GeneratorAlgo::Prim);
+    let canonical = serde_json::to_value(&maze).unwrap();
+    for _ in 0..4 {
+        let competitor_input = maze.clone();
+        assert_eq!(serde_json::to_value(competitor_input).unwrap(), canonical);
+    }
+}

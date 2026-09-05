@@ -4,7 +4,7 @@
 
 **Last updated:** 2026-09-03
 
-**Current phase:** Phase 6 is ready
+**Current phase:** Phase 7 is ready
 **Target:** a polished, public, completely free portfolio experience
 
 ## 1. Vision
@@ -55,8 +55,8 @@ Free tiers provide no production SLA. Koyeb may scale the API to zero after one 
 | 3. Realtime engine | complete | Incremental, resumable, bounded solve streaming | 2 |
 | 4. Design system | complete | Premium responsive shell and reusable UI primitives | 1 |
 | 5. Maze visualization | complete | Correct, fast, accessible maze and replay controls | 3, 4 |
-| 6. Algorithm Race | ready | Signature comparison and education experience | 5 |
-| 7. Identity and community | not-started | GitHub-backed profiles, scores, challenges, achievements | 2, 4, 6 |
+| 6. Algorithm Race | complete | Signature comparison and education experience | 5 |
+| 7. Identity and community | ready | GitHub-backed profiles, scores, challenges, achievements | 2, 4, 6 |
 | 8. Free deployment | not-started | Vercel + Koyeb + Neon public environment | 2, 3, 4 |
 | 9. Portfolio launch | not-started | Demo media, README, diagrams, audit, tagged release | 6, 7, 8 |
 
@@ -108,3 +108,4 @@ v0.1 is complete only when:
 | 2026-09-03 | Completed Phase 2 with PostgreSQL persistence, explicit durable run states, bounded blocking execution, restart recovery, stable GitHub ownership, submitted-only rankings, safe API errors, and database/HTTP integration coverage. Advanced Phase 3 to ready. |
 | 2026-09-03 | Completed Phase 3 with live solver progress, protocol v1 snapshots and deltas, race-free retained subscriptions, deterministic bounded replays, reconnect fallback, cancellation, graceful shutdown, and unit/Postgres/browser coverage. Advanced Phase 4 to ready. |
 | 2026-09-03 | Completed Phase 4 with a premium responsive lab shell, two accessible persistent themes, reusable semantic primitives, branded metadata, intentional states, axe automation, visual viewport evidence, and keyboard/zoom/reduced-motion coverage. Advanced Phase 5 to ready. |
+| 2026-09-05 | Completed Phase 6 with bounded fair race orchestration, synchronized comparison modes, peak-frontier metrics, deterministic analysis and education, canonical versioned sharing, key-aware presets, replay integration, and cross-stack coverage. Advanced Phase 7 to ready. |

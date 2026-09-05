@@ -44,7 +44,8 @@ pub fn router(
         .route("/solve/stream", get(realtime::stream));
     let expensive = Router::new()
         .route("/maze/generate", post(handlers::generate))
-        .route("/solve", post(handlers::solve));
+        .route("/solve", post(handlers::solve))
+        .route("/race", post(handlers::race));
     let baseline = Router::new()
         .route("/maze/{maze_id}", get(handlers::get_maze))
         .route("/run/{run_id}", get(handlers::get_run))

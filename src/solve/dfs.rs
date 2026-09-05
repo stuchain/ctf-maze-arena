@@ -28,6 +28,7 @@ impl Solver for DfsSolver {
         let mut visited = HashSet::new();
         let mut parent: HashMap<Cell, Cell> = HashMap::new();
         let mut stack = vec![maze.start];
+        let mut peak_frontier = stack.len();
         let mut step = 0_u32;
 
         while let Some(cell) = stack.pop() {
@@ -43,6 +44,7 @@ impl Solver for DfsSolver {
                     if !visited.contains(&next) && !parent.contains_key(&next) {
                         parent.insert(next, cell);
                         stack.push(next);
+                        peak_frontier = peak_frontier.max(stack.len());
                     }
                 }
             }
@@ -70,6 +72,7 @@ impl Solver for DfsSolver {
                 visited: visited.len(),
                 cost,
                 ms,
+                peak_frontier,
             },
         })
     }

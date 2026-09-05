@@ -110,10 +110,12 @@ pub async fn start(input: StartRun<'_>) -> Result<RunId, ServiceError> {
     if !input.accepting.load(Ordering::Acquire) {
         return Err(ServiceError::ShuttingDown);
     }
-    let lease = input
-        .active_limits
-        .acquire(input.actor)
-        .ok_or(ServiceError::TooManyRequests)?;
+    let lease = Arc::new(
+        input
+            .active_limits
+            .acquire(input.actor.clone())
+            .ok_or(ServiceError::TooManyRequests)?,
+    );
     let run_id = store::create_run(
         input.pool,
         input.maze_id,
@@ -122,6 +124,42 @@ pub async fn start(input: StartRun<'_>) -> Result<RunId, ServiceError> {
         input.identity,
     )
     .await?;
+    start_created(input, lease, run_id).await;
+    Ok(run_id)
+}
+
+pub async fn start_race(inputs: Vec<StartRun<'_>>) -> Result<Vec<RunId>, ServiceError> {
+    let first = inputs
+        .first()
+        .ok_or_else(|| ServiceError::InvalidInput("a race requires competitors".into()))?;
+    if !first.accepting.load(Ordering::Acquire) {
+        return Err(ServiceError::ShuttingDown);
+    }
+    let lease = Arc::new(
+        first
+            .active_limits
+            .acquire(first.actor.clone())
+            .ok_or(ServiceError::TooManyRequests)?,
+    );
+    let solver_names = inputs
+        .iter()
+        .map(|input| input.solver_name.as_str())
+        .collect::<Vec<_>>();
+    let run_ids = store::create_runs(
+        first.pool,
+        first.maze_id,
+        &solver_names,
+        first.request_id,
+        first.identity,
+    )
+    .await?;
+    for (input, run_id) in inputs.into_iter().zip(run_ids.iter().copied()) {
+        start_created(input, Arc::clone(&lease), run_id).await;
+    }
+    Ok(run_ids)
+}
+
+async fn start_created(input: StartRun<'_>, lease: Arc<ActiveSolveLease>, run_id: RunId) {
     let stream = RunStream::new(
         run_id,
         input.config.history_capacity,
@@ -236,7 +274,6 @@ pub async fn start(input: StartRun<'_>) -> Result<RunId, ServiceError> {
         drop(permit);
         schedule_cleanup(streams, run_id, stream, config.terminal_retention);
     });
-    Ok(run_id)
 }
 
 pub async fn cancel(
@@ -255,7 +292,7 @@ pub async fn cancel(
     stream.request_cancel();
     let changed = store::cancel_run(pool, run_id, github_subject).await?;
     stream.cancelled();
-    Ok(changed)
+    Ok(changed || stream.is_cancelled())
 }
 
 pub async fn shutdown(

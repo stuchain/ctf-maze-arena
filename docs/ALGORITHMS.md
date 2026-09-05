@@ -13,7 +13,7 @@
 
 - Grow a tree from a starting cell. The *frontier* is edges from the tree to cells not yet in the tree.
 - Repeatedly pick a random frontier edge (seeded), add the outside cell, and remove the wall between them.
-- Also produces a uniform random spanning tree (implementation uses random edge selection from the frontier).
+- Produces a spanning tree by choosing uniformly from the current frontier edges. This local choice does **not** make the result a uniform sample over all grid spanning trees.
 
 ### DFS backtracker
 
@@ -46,3 +46,13 @@ Grid moves are **4-directional** (no diagonals) in this project.
 - State is `(cell, keys_bitmask)` where each bit marks holding a given key id.
 - Search (BFS-style expansion) is performed in this expanded graph: moves respect walls and doors (need the required key in the bitmask); picking up a key sets the corresponding bit.
 - Finds a shortest path in the state graph when a solution exists.
+
+## Race metrics
+
+- **Path cost:** number of unit moves in the returned path.
+- **Visited:** states expanded before reaching the goal. For DP Keys this counts `(cell, key-set)` states, so it is not directly comparable with cell-only solvers.
+- **Peak frontier:** largest number of queued/open states observed at one time; a practical indicator of search memory pressure, not total memory allocation.
+- **Compute runtime:** wall-clock time inside one backend solver execution. Race solvers run sequentially through the bounded compute gate, avoiding deliberate inter-solver CPU contention, but infrastructure noise still makes this unsuitable as a microbenchmark.
+- **Playback time:** user-controlled visualization time. It is never used as a compute-performance result.
+
+For classic unit-cost mazes, BFS and A* must return equal optimal path costs. DFS remains complete on the finite maze graph but does not guarantee an optimal path. A* uses Manhattan distance, which is consistent and admissible for four-directional unit-cost movement. DP Keys is complete and optimal in its expanded state graph.
