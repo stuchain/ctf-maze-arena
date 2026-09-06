@@ -34,17 +34,48 @@ pub(super) async fn ready(
     Ok(Json(json!({"status": "ready"})))
 }
 
-pub(super) async fn daily() -> Json<DailyResponse> {
-    let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let seed = date.bytes().fold(0u64, |acc, byte| {
+pub(super) async fn daily(
+    Extension(state): Extension<Arc<AppState>>,
+    Extension(request_id): Extension<String>,
+    claims: Option<Extension<AuthClaims>>,
+) -> Result<Json<DailyResponse>, ApiError> {
+    const CHALLENGE_VERSION: u16 = 1;
+    let now = chrono::Utc::now();
+    let date = now.date_naive();
+    let seed_source = format!("{date}:v{CHALLENGE_VERSION}");
+    let seed = seed_source.bytes().fold(0u64, |acc, byte| {
         acc.wrapping_mul(31).wrapping_add(byte as u64)
-    });
-    Json(DailyResponse {
-        seed,
-        date,
-        w: 15,
-        h: 15,
-    })
+    }) % 9_007_199_254_740_991;
+    let challenge = store::get_or_create_daily_challenge(&state.db, date, CHALLENGE_VERSION, seed)
+        .await
+        .map_err(|error| ApiError::from_service(error.into(), &request_id))?;
+    let (personal_best, streak) = if let Some(Extension(claims)) = claims {
+        store::daily_personal_state(&state.db, challenge.id, &claims.sub)
+            .await
+            .map_err(|error| ApiError::from_service(error.into(), &request_id))?
+    } else {
+        (None, 0)
+    };
+    let tomorrow = date
+        .succ_opt()
+        .unwrap_or(date)
+        .and_hms_opt(0, 0, 0)
+        .unwrap()
+        .and_utc();
+    Ok(Json(DailyResponse {
+        challenge_id: challenge.id,
+        seed: challenge.seed,
+        date: date.to_string(),
+        version: challenge.version,
+        w: u32::from(challenge.width),
+        h: u32::from(challenge.height),
+        algo: challenge.generator_algo,
+        feature_preset: challenge.feature_preset,
+        seconds_until_reset: (tomorrow - now).num_seconds().max(0),
+        completed: personal_best.is_some(),
+        personal_best,
+        streak,
+    }))
 }
 
 pub(super) async fn generate(
@@ -60,6 +91,7 @@ pub(super) async fn generate(
         request.seed,
         &request.algo,
         &request.feature_preset,
+        request.daily_challenge_id,
     )
     .await
     .map_err(|error| ApiError::from_service(error, &request_id))?;
@@ -146,6 +178,7 @@ pub(super) async fn race(
             solver,
             request_id: &request_id,
             identity: identity.as_ref(),
+            race_id: Some(race_id),
         });
     }
     let run_ids = run::start_race(starts)
@@ -235,6 +268,7 @@ pub(super) async fn solve(
         solver,
         request_id: &request_id,
         identity: identity.as_ref(),
+        race_id: None,
     })
     .await
     .map_err(|error| ApiError::from_service(error, &request_id))?;
@@ -312,11 +346,117 @@ pub(super) async fn get_replay(
 pub(super) async fn leaderboard(
     Extension(state): Extension<Arc<AppState>>,
     Extension(request_id): Extension<String>,
+    claims: Option<Extension<AuthClaims>>,
     Query(query): Query<LeaderboardQuery>,
 ) -> Result<Json<Vec<store::LeaderboardEntry>>, ApiError> {
-    let maze_id = parse_uuid(&query.maze_id, "mazeId", &request_id)?;
-    let entries = leaderboard_service::list(&state.db, maze_id, query.limit, query.offset)
-        .await
-        .map_err(|error| ApiError::from_service(error, &request_id))?;
+    leaderboard_with_claims(state, request_id, claims.map(|value| value.0), query).await
+}
+
+async fn leaderboard_with_claims(
+    state: Arc<AppState>,
+    request_id: String,
+    claims: Option<AuthClaims>,
+    query: LeaderboardQuery,
+) -> Result<Json<Vec<store::LeaderboardEntry>>, ApiError> {
+    let maze_id = query
+        .maze_id
+        .as_deref()
+        .map(|value| parse_uuid(value, "mazeId", &request_id))
+        .transpose()?;
+    let race_id = query
+        .race_id
+        .as_deref()
+        .map(|value| parse_uuid(value, "raceId", &request_id))
+        .transpose()?;
+    let daily_date = query
+        .daily_date
+        .as_deref()
+        .map(|value| {
+            chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|_| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "invalid_date",
+                    "dailyDate must use YYYY-MM-DD.",
+                    &request_id,
+                )
+            })
+        })
+        .transpose()?;
+    let personal_subject = match query.scope.as_deref() {
+        None | Some("all") => None,
+        Some("personal") => Some(
+            claims
+                .as_ref()
+                .ok_or_else(|| ApiError::from_service(ServiceError::Unauthorized, &request_id))?
+                .sub
+                .as_str(),
+        ),
+        Some(_) => {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_scope",
+                "scope must be all or personal.",
+                &request_id,
+            ))
+        }
+    };
+    let entries = leaderboard_service::list_filtered(
+        &state.db,
+        leaderboard_service::Filters {
+            maze_id,
+            daily_date,
+            race_id,
+            solver: query.solver.as_deref(),
+            personal_subject,
+            limit: query.limit,
+            offset: query.offset,
+        },
+    )
+    .await
+    .map_err(|error| ApiError::from_service(error, &request_id))?;
     Ok(Json(entries))
+}
+
+fn identity_from_claims(claims: &AuthClaims) -> Identity {
+    Identity {
+        github_subject: claims.sub.clone(),
+        display_name: claims.name.clone(),
+        avatar_url: claims.avatar_url.clone(),
+    }
+}
+
+pub(super) async fn profile(
+    Extension(state): Extension<Arc<AppState>>,
+    Extension(request_id): Extension<String>,
+    Extension(claims): Extension<AuthClaims>,
+) -> Result<Json<store::UserProfile>, ApiError> {
+    let profile = store::get_profile(&state.db, &identity_from_claims(&claims))
+        .await
+        .map_err(|error| ApiError::from_service(error.into(), &request_id))?;
+    Ok(Json(profile))
+}
+
+pub(super) async fn export_profile(
+    Extension(state): Extension<Arc<AppState>>,
+    Extension(request_id): Extension<String>,
+    Extension(claims): Extension<AuthClaims>,
+) -> Result<Json<store::UserProfile>, ApiError> {
+    let profile = store::get_profile(&state.db, &identity_from_claims(&claims))
+        .await
+        .map_err(|error| ApiError::from_service(error.into(), &request_id))?;
+    Ok(Json(profile))
+}
+
+pub(super) async fn delete_profile(
+    Extension(state): Extension<Arc<AppState>>,
+    Extension(request_id): Extension<String>,
+    Extension(claims): Extension<AuthClaims>,
+) -> Result<Json<DeleteProfileResponse>, ApiError> {
+    let deleted = store::delete_profile(&state.db, &claims.sub)
+        .await
+        .map_err(|error| ApiError::from_service(error.into(), &request_id))?;
+    Ok(Json(DeleteProfileResponse {
+        deleted,
+        leaderboard_policy: "Public ranked results remain under an anonymous Deleted player label; profile data and private ownership are removed.",
+    }))
 }

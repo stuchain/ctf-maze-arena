@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useCallback, useEffect, useState } from 'react';
+import { signIn, useSession } from 'next-auth/react';
 import { Achievements } from '@/components/Achievements';
 import { AppHeader } from '@/components/AppHeader';
+import { CommunityProfile } from '@/components/CommunityProfile';
 import { AlgorithmGuide } from '@/components/AlgorithmGuide';
 import { GenerateForm, type GenerateFormParams } from '@/components/GenerateForm';
 import { Leaderboard, type LeaderboardEntry } from '@/components/Leaderboard';
@@ -27,6 +28,7 @@ import {
   raceResponseSchema,
   toErrorMessage,
   tokenResponseSchema,
+  type DailyChallenge,
 } from '@/lib/api';
 import { publicEnv } from '@/lib/env';
 import { backendMazeToMazeData } from '@/lib/maze';
@@ -84,6 +86,7 @@ const SOLVER_GUARANTEES: Record<string, string> = {
 
 export default function Home() {
   const { status: authStatus } = useSession();
+  const authEnabled = publicEnv.NEXT_PUBLIC_AUTH_MODE !== 'anonymous';
   const [solver, setSolver] = useState('ASTAR');
   const [maze, setMaze] = useState<MazeData | null>(null);
   const [mazeId, setMazeId] = useState<string | null>(null);
@@ -94,8 +97,15 @@ export default function Home() {
   const [cancelLoading, setCancelLoading] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
+  const [leaderboardSolver, setLeaderboardSolver] = useState('');
+  const [leaderboardScope, setLeaderboardScope] = useState<'all' | 'personal'>('all');
+  const [leaderboardPage, setLeaderboardPage] = useState(0);
+  const [leaderboardKind, setLeaderboardKind] = useState<'maze' | 'daily' | 'race'>('maze');
   const [submissionStatus, setSubmissionStatus] = useState<string | null>(null);
-  const [dailyInfo, setDailyInfo] = useState<{ seed: number; date: string } | null>(null);
+  const [dailyInfo, setDailyInfo] = useState<DailyChallenge | null>(null);
+  const [dailyRemaining, setDailyRemaining] = useState(0);
   const [experienceMode, setExperienceMode] = useState<'single' | 'race'>('single');
   const [raceSolvers, setRaceSolvers] = useState<RaceSolver[]>(DEFAULT_RACE_CONFIG.solvers);
   const [raceDisplayMode, setRaceDisplayMode] = useState<RaceDisplayMode>('overview');
@@ -106,15 +116,44 @@ export default function Home() {
   const [generationConfig, setGenerationConfig] = useState<GenerateFormParams | null>(null);
   const [formDefaults, setFormDefaults] = useState<GenerateFormParams | null>(null);
 
+  const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authStatus !== 'authenticated') return headers;
+    try {
+      const tokenData = await requestJson('/api/token', tokenResponseSchema);
+      headers.Authorization = `Bearer ${tokenData.token}`;
+    } catch {
+      return headers;
+    }
+    return headers;
+  }, [authStatus]);
+
   useEffect(() => {
-    if (!mazeId) {
+    if (!mazeId || (leaderboardKind === 'daily' && !dailyInfo) || (leaderboardKind === 'race' && !raceId)) {
       setLeaderboard([]);
       return;
     }
-    requestJson(`${API}/api/leaderboard?mazeId=${encodeURIComponent(mazeId)}`, leaderboardResponseSchema)
-      .then(setLeaderboard)
-      .catch(() => setLeaderboard([]));
-  }, [mazeId]);
+    let active = true;
+    const params = new URLSearchParams({ limit: '10', offset: String(leaderboardPage * 10) });
+    if (leaderboardKind === 'maze') params.set('mazeId', mazeId);
+    if (leaderboardKind === 'daily' && dailyInfo) params.set('dailyDate', dailyInfo.date);
+    if (leaderboardKind === 'race' && raceId) params.set('raceId', raceId);
+    if (leaderboardSolver) params.set('solver', leaderboardSolver);
+    if (leaderboardScope === 'personal') params.set('scope', 'personal');
+    setLeaderboardLoading(true); setLeaderboardError(null);
+    authHeaders().then((headers) => requestJson(`${API}/api/leaderboard?${params}`, leaderboardResponseSchema, { headers }))
+      .then((entries) => { if (active) setLeaderboard(entries); })
+      .catch((cause) => { if (active) { setLeaderboard([]); setLeaderboardError(toErrorMessage(cause, 'Could not load ranked runs.')); } })
+      .finally(() => { if (active) setLeaderboardLoading(false); });
+    return () => { active = false; };
+  }, [mazeId, raceId, dailyInfo, leaderboardKind, leaderboardSolver, leaderboardScope, leaderboardPage, authHeaders, submissionStatus]);
+
+  useEffect(() => {
+    setDailyRemaining(dailyInfo?.secondsUntilReset ?? 0);
+    if (!dailyInfo) return;
+    const timer = window.setInterval(() => setDailyRemaining((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [dailyInfo]);
 
   const {
     status: solveStreamStatus, frames, path: solvePath, stats,
@@ -128,19 +167,7 @@ export default function Home() {
   const raceIsActive = Boolean(raceId) && selectedRaceStreams.some((stream) => ACTIVE_STATUSES.includes(stream.status));
   const raceIsComplete = Boolean(raceId) && selectedRaceStreams.every((stream) => stream.status === 'completed');
 
-  const authHeaders = async (): Promise<Record<string, string>> => {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (authStatus !== 'authenticated') return headers;
-    try {
-      const tokenData = await requestJson('/api/token', tokenResponseSchema);
-      headers.Authorization = `Bearer ${tokenData.token}`;
-    } catch {
-      return headers;
-    }
-    return headers;
-  };
-
-  const handleGenerate = async (params: GenerateFormParams) => {
+  const handleGenerate = async (params: GenerateFormParams & { dailyChallengeId?: string }) => {
     setLoading(true);
     setError(null);
     setRunId(null);
@@ -167,9 +194,9 @@ export default function Home() {
   const handleDaily = async () => {
     setError(null);
     try {
-      const data = await requestJson(`${API}/api/daily`, dailyResponseSchema);
-      setDailyInfo({ seed: data.seed, date: data.date });
-      await handleGenerate({ w: data.w, h: data.h, seed: data.seed, algo: 'KRUSKAL', featurePreset: 'classic' });
+      const data = await requestJson(`${API}/api/daily`, dailyResponseSchema, { headers: await authHeaders() });
+      setDailyInfo(data); setLeaderboardKind('daily'); setLeaderboardPage(0);
+      await handleGenerate({ w: data.w, h: data.h, seed: data.seed, algo: data.algo, featurePreset: data.featurePreset, dailyChallengeId: data.challengeId });
     } catch (cause: unknown) {
       setError(`${toErrorMessage(cause, 'Could not load today’s challenge.')} Try a custom maze instead.`);
     }
@@ -194,6 +221,7 @@ export default function Home() {
         method: 'POST', headers: await authHeaders(), body: JSON.stringify({ mazeId, solvers: raceSolvers }),
       });
       setRaceId(data.raceId);
+      setLeaderboardKind('race'); setLeaderboardPage(0);
       setRaceRunIds(Object.fromEntries(data.runs.map((run) => [run.solver, run.runId])) as RaceRunMap);
     } catch (cause: unknown) {
       setError(`${toErrorMessage(cause, 'Could not start the race.')} Check the competitor selection and try again.`);
@@ -281,6 +309,38 @@ export default function Home() {
     }
   };
 
+  const handleSubmitRaceScores = async () => {
+    const ids = Object.values(raceRunIds);
+    if (!ids.length) return;
+    setSubmissionStatus('Submitting race scores…'); setError(null);
+    try {
+      const headers = await authHeaders();
+      const results = await Promise.all(ids.map((id) => requestJson(
+        `${API}/api/leaderboard`, leaderboardSubmitResponseSchema,
+        { method: 'POST', headers, body: JSON.stringify({ runId: id }) },
+      )));
+      const created = results.filter((result) => !result.duplicate).length;
+      setSubmissionStatus(created ? `${created} race scores submitted.` : 'Race scores already submitted.');
+    } catch (cause) {
+      setSubmissionStatus(null);
+      setError(`${toErrorMessage(cause, 'Could not submit the race scores.')} Confirm you are signed in and try again.`);
+    }
+  };
+
+  const handleShareResult = async () => {
+    if (!runId) return;
+    const url = `${window.location.origin}/replay/${runId}`;
+    try { await navigator.clipboard.writeText(url); setShareStatus('Replay link copied.'); }
+    catch { setShareStatus('Replay is ready to share from the address bar.'); }
+  };
+
+  const formatCountdown = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const rest = seconds % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`;
+  };
+
   return (
     <div className="app-frame">
       <AppHeader />
@@ -295,7 +355,13 @@ export default function Home() {
             <div>
               <span className="preset-card__label">Daily Seed</span>
               <strong>{dailyInfo ? dailyInfo.seed.toLocaleString() : 'Fresh at 00:00 UTC'}</strong>
-              <small>{dailyInfo?.date ? formatChallengeDate(dailyInfo.date) : 'Same challenge for everyone'}</small>
+              <small>{dailyInfo?.date ? `${formatChallengeDate(dailyInfo.date)} · ${formatCountdown(dailyRemaining)} left` : 'Same challenge for everyone'}</small>
+              {dailyInfo ? <small className="preset-card__progress">
+                {dailyInfo.completed
+                  ? `Completed · best ${dailyInfo.personalBest?.cost.toLocaleString() ?? '—'} cost`
+                  : 'Not completed'}
+                {` · ${dailyInfo.streak} day${dailyInfo.streak === 1 ? '' : 's'} streak`}
+              </small> : null}
             </div>
             <Button variant="secondary" size="sm" onClick={() => void handleDaily()} loading={loading}>Load Daily</Button>
           </div>
@@ -386,18 +452,29 @@ export default function Home() {
               Submit Ranked Score
             </Button>
           ) : null}
+          {experienceMode === 'race' && raceIsComplete && authStatus === 'authenticated' ? <Button className="button--full" variant="secondary" onClick={() => void handleSubmitRaceScores()} loading={submissionStatus === 'Submitting race scores…'}>Submit Race Scores</Button> : null}
+          {experienceMode === 'race' && raceIsComplete && authStatus !== 'authenticated' ? <Notice title="Race complete" tone="info">Anonymous race replays remain shareable.{authEnabled ? ' Sign in before a future race to submit its server-owned results.' : ''}</Notice> : null}
+          {solveStreamStatus === 'completed' && authStatus !== 'authenticated' ? <Notice title="Run complete" tone="info">Your replay remains available anonymously.{authEnabled ? ' Sign in only if you want to submit future runs to rankings; runs started anonymously cannot be claimed.' : ''}</Notice> : null}
+          {solveStreamStatus === 'completed' ? <Button className="button--full" variant="ghost" onClick={() => void handleShareResult()}>Share Result Replay</Button> : null}
+          {solveStreamStatus === 'completed' && authEnabled && authStatus !== 'authenticated' ? <Button className="button--full" variant="secondary" onClick={() => void signIn('github')}>Sign In for Future Ranked Runs</Button> : null}
           {submissionStatus ? <Notice title="Leaderboard" tone="success">{submissionStatus}</Notice> : null}
           <div className="panel-divider" />
-          <div className="section-heading"><h3>Achievements</h3><span>Local Progress</span></div>
-          <Achievements />
+          <div className="section-heading"><h3>Achievements</h3><span>{authStatus === 'authenticated' ? 'Server Verified' : 'Guest Progress'}</span></div>
+          <Achievements refreshKey={submissionStatus} />
         </Panel>
       </main>
 
       <section className="secondary-grid" aria-label="Arena intelligence">
         <Panel>
           <PanelHeader eyebrow="Community" title="Maze Leaderboard" description="Ranked by path cost, runtime, then explored cells." />
-          <Leaderboard entries={leaderboard} />
+          <div className="segmented-control leaderboard-kind" aria-label="Leaderboard type">
+            <button aria-pressed={leaderboardKind === 'maze'} onClick={() => { setLeaderboardKind('maze'); setLeaderboardPage(0); }}>Maze</button>
+            <button aria-pressed={leaderboardKind === 'daily'} disabled={!dailyInfo} onClick={() => { setLeaderboardKind('daily'); setLeaderboardPage(0); }}>Daily</button>
+            <button aria-pressed={leaderboardKind === 'race'} disabled={!raceId} onClick={() => { setLeaderboardKind('race'); setLeaderboardPage(0); }}>Race</button>
+          </div>
+          <Leaderboard entries={leaderboard} loading={leaderboardLoading} error={leaderboardError} solver={leaderboardSolver} scope={leaderboardScope} page={leaderboardPage} pageSize={10} signedIn={authStatus === 'authenticated'} onSolverChange={(value) => { setLeaderboardSolver(value); setLeaderboardPage(0); }} onScopeChange={(value) => { setLeaderboardScope(value); setLeaderboardPage(0); }} onPageChange={setLeaderboardPage} />
         </Panel>
+        <Panel><PanelHeader eyebrow="Identity" title="Your Arena Profile" description="Durable progress stays optional and transparent." /><CommunityProfile refreshKey={submissionStatus} /></Panel>
         <AlgorithmGuide />
       </section>
 
@@ -406,6 +483,7 @@ export default function Home() {
         open={confirmCancel} title="Cancel This Solver Run?"
         description="The current exploration will stop and the run will be recorded as cancelled."
         confirmLabel="Cancel Run" loading={cancelLoading}
+        cancelLabel="Keep Running"
         onCancel={() => setConfirmCancel(false)} onConfirm={() => void handleCancel()}
       />
     </div>

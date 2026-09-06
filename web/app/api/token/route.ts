@@ -28,6 +28,8 @@ export async function GET() {
     avatarUrl: session.user.image ?? null,
     iat: now,
     exp: now + TOKEN_TTL_SECS,
+    iss: serverEnv.JWT_ISSUER,
+    aud: serverEnv.JWT_AUDIENCE,
   };
   const token = jwt.sign(payload, jwtSecret, { algorithm: 'HS256' });
 

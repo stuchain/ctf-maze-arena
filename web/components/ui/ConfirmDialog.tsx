@@ -8,6 +8,7 @@ interface ConfirmDialogProps {
   title: string;
   description: string;
   confirmLabel: string;
+  cancelLabel?: string;
   loading?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -18,6 +19,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  cancelLabel = 'Cancel',
   loading = false,
   onCancel,
   onConfirm,
@@ -50,7 +52,7 @@ export function ConfirmDialog({
         <p id="confirm-dialog-description">{description}</p>
       </div>
       <div className="dialog__actions">
-        <Button variant="secondary" onClick={onCancel}>Keep Running</Button>
+        <Button variant="secondary" onClick={onCancel}>{cancelLabel}</Button>
         <Button variant="destructive" loading={loading} onClick={onConfirm}>{confirmLabel}</Button>
       </div>
     </dialog>

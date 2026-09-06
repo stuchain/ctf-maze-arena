@@ -20,6 +20,8 @@ pub enum ServiceError {
     Unavailable,
     #[error("too many active solves")]
     TooManyRequests,
+    #[error("submission rate limit exceeded")]
+    SubmissionLimit,
     #[error("service is shutting down")]
     ShuttingDown,
     #[error("internal operation failed")]
@@ -33,6 +35,7 @@ impl From<StoreError> for ServiceError {
             StoreError::Forbidden => Self::Forbidden,
             StoreError::RunNotCompleted | StoreError::InvalidTransition => Self::Conflict,
             StoreError::Database(_) => Self::Unavailable,
+            StoreError::RateLimited => Self::SubmissionLimit,
             StoreError::InvalidData(_) | StoreError::NumericOverflow => Self::Internal,
         }
     }

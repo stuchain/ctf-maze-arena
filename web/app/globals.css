@@ -60,7 +60,7 @@
   --action-secondary: #e9eff8;
   --action-destructive: #dc3654;
   --status-info: #087480;
-  --status-success: #15835a;
+  --status-success: #0d704a;
   --status-warning: #a16207;
   --status-danger: #c92848;
   --maze-unvisited: #f3f6fb;
@@ -227,6 +227,7 @@ h3 { font-size: 0.87rem; }
 .preset-card__label { color: var(--action-primary); font-family: var(--font-geist-mono); font-size: 0.57rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 .preset-card strong { overflow: hidden; font-size: 0.76rem; text-overflow: ellipsis; white-space: nowrap; }
 .preset-card small { color: var(--text-muted); font-size: 0.63rem; }
+.preset-card .preset-card__progress { color: var(--text-secondary); }
 
 .configuration-form { display: grid; gap: 0.85rem; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
@@ -400,6 +401,27 @@ kbd { padding: 0.1rem 0.3rem; border: 1px solid var(--border-default); border-ra
 .compact-empty__rank { color: var(--text-muted); font-family: var(--font-geist-mono); font-size: 1.3rem; font-weight: 800; }
 .compact-empty strong { font-size: 0.72rem; }
 .compact-empty p { margin-top: 0.15rem; color: var(--text-muted); font-size: 0.64rem; }
+.leaderboard-kind { grid-template-columns: repeat(3, 1fr); margin-bottom: 0.65rem; }
+.leaderboard-controls { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-bottom: 0.65rem; }
+.leaderboard-controls label { display: grid; gap: 0.2rem; color: var(--text-muted); font-size: 0.55rem; font-weight: 700; text-transform: uppercase; }
+.leaderboard-controls select { min-height: 2rem; padding: 0 1.8rem 0 0.55rem; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--surface-raised); color: var(--text-primary); font: inherit; text-transform: none; }
+.personal-marker { margin-left: 0.35rem; padding: 0.1rem 0.3rem; border-radius: 999px; background: color-mix(in srgb, var(--action-primary) 15%, transparent); color: var(--action-primary); font-size: 0.48rem; font-weight: 800; text-transform: uppercase; }
+.pagination { display: flex; align-items: center; justify-content: flex-end; gap: 0.6rem; padding-top: 0.65rem; color: var(--text-muted); font-size: 0.58rem; }
+.pagination button { border: 0; background: transparent; color: var(--action-primary); font: inherit; font-weight: 700; cursor: pointer; }
+.pagination button:disabled { color: var(--text-muted); cursor: not-allowed; }
+.community-hint { margin-bottom: 0.6rem; color: var(--text-muted); font-size: 0.6rem; line-height: 1.55; }
+.profile-card { display: grid; gap: 0.7rem; }
+.profile-card > p, .privacy-copy p { color: var(--text-secondary); font-size: 0.62rem; line-height: 1.55; }
+.profile-summary { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; }
+.profile-summary strong { font-size: 0.75rem; }
+.profile-summary p, .profile-summary > span { color: var(--text-muted); font-size: 0.58rem; }
+.profile-history { display: grid; gap: 0.35rem; list-style: none; }
+.profile-history li { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.45rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); font-size: 0.58rem; }
+.profile-history a { color: var(--action-primary); font-weight: 700; }
+.profile-history span { color: var(--text-muted); }
+.privacy-copy summary { color: var(--text-primary); font-size: 0.62rem; font-weight: 700; cursor: pointer; }
+.privacy-copy p { margin-top: 0.45rem; }
+.profile-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .concept-panel { position: relative; overflow: hidden; }
 .concept-panel::after { content: ""; position: absolute; right: -3rem; bottom: -5rem; width: 12rem; height: 12rem; border: 1px solid color-mix(in srgb, var(--action-primary) 20%, transparent); border-radius: 50%; box-shadow: 0 0 0 2rem color-mix(in srgb, var(--action-primary) 3%, transparent), 0 0 0 4rem color-mix(in srgb, var(--action-primary) 2%, transparent); pointer-events: none; }
 .formula { position: relative; z-index: 1; display: flex; align-items: center; gap: 0.7rem; font-family: var(--font-geist-mono); }

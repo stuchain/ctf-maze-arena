@@ -2,9 +2,9 @@
 
 **Status:** active
 
-**Last updated:** 2026-09-03
+**Last updated:** 2026-09-06
 
-**Current phase:** Phase 7 is ready
+**Current phase:** Phase 8 is ready
 **Target:** a polished, public, completely free portfolio experience
 
 ## 1. Vision
@@ -35,7 +35,7 @@ Free tiers provide no production SLA. Koyeb may scale the API to zero after one 
 
 - Rust/Axum backend with deterministic generation and four solvers.
 - PostgreSQL persistence, replay storage, WebSocket transport, GitHub OAuth, JWT modes, CORS, rate limiting, request IDs, structured logging, Docker, CI, benchmarks, and Playwright smoke tests.
-- 68 Rust tests, 11 frontend unit tests, and 11 browser flows pass; formatting, Clippy, full ESLint, TypeScript, production build, and Playwright flows share enforced quality gates.
+- 77 Rust tests, 27 frontend unit tests, and 17 browser flows pass; formatting, Clippy, full ESLint, TypeScript, production build, PostgreSQL integration, and Playwright flows share enforced quality gates.
 - Typed frontend API parsing, fail-fast runtime configuration, secret-safe environment examples, dependency review, and hardened container scanning are established.
 - A responsive three-region application shell, semantic two-theme token system, accessible UI primitives, branded metadata, and intentional product states are established.
 
@@ -56,8 +56,8 @@ Free tiers provide no production SLA. Koyeb may scale the API to zero after one 
 | 4. Design system | complete | Premium responsive shell and reusable UI primitives | 1 |
 | 5. Maze visualization | complete | Correct, fast, accessible maze and replay controls | 3, 4 |
 | 6. Algorithm Race | complete | Signature comparison and education experience | 5 |
-| 7. Identity and community | ready | GitHub-backed profiles, scores, challenges, achievements | 2, 4, 6 |
-| 8. Free deployment | not-started | Vercel + Koyeb + Neon public environment | 2, 3, 4 |
+| 7. Identity and community | complete | GitHub-backed profiles, scores, challenges, achievements | 2, 4, 6 |
+| 8. Free deployment | ready | Vercel + Koyeb + Neon public environment | 2, 3, 4 |
 | 9. Portfolio launch | not-started | Demo media, README, diagrams, audit, tagged release | 6, 7, 8 |
 
 Phase 4 can begin after Phase 1 while Phases 2–3 progress, but the default implementation sequence is serial to keep review and verification clear.
@@ -109,3 +109,4 @@ v0.1 is complete only when:
 | 2026-09-03 | Completed Phase 3 with live solver progress, protocol v1 snapshots and deltas, race-free retained subscriptions, deterministic bounded replays, reconnect fallback, cancellation, graceful shutdown, and unit/Postgres/browser coverage. Advanced Phase 4 to ready. |
 | 2026-09-03 | Completed Phase 4 with a premium responsive lab shell, two accessible persistent themes, reusable semantic primitives, branded metadata, intentional states, axe automation, visual viewport evidence, and keyboard/zoom/reduced-motion coverage. Advanced Phase 5 to ready. |
 | 2026-09-05 | Completed Phase 6 with bounded fair race orchestration, synchronized comparison modes, peak-frontier metrics, deterministic analysis and education, canonical versioned sharing, key-aware presets, replay integration, and cross-stack coverage. Advanced Phase 7 to ready. |
+| 2026-09-06 | Completed Phase 7 with strict JWT claims, optional GitHub profiles, authoritative submission and versioned achievements, immutable daily challenges and streaks, filtered/tied rankings, replay conversion, privacy export/deletion, and abuse controls. Advanced Phase 8 to ready. |

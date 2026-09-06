@@ -8,6 +8,7 @@ use axum::{
 };
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 const BEARER_PREFIX: &str = "Bearer ";
 
@@ -16,6 +17,8 @@ pub struct JwtConfig {
     pub secret: Option<String>,
     pub clock_skew_secs: u64,
     pub auth_mode: AuthMode,
+    pub issuer: String,
+    pub audience: String,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -35,6 +38,8 @@ pub struct AuthClaims {
     pub avatar_url: Option<String>,
     pub exp: usize,
     pub iat: usize,
+    pub iss: String,
+    pub aud: String,
 }
 
 pub async fn jwt_claims_middleware(
@@ -78,7 +83,13 @@ pub async fn jwt_claims_middleware(
             )
             .into_response();
         };
-        match decode_claims(token, secret, config.clock_skew_secs) {
+        match decode_claims(
+            token,
+            secret,
+            config.clock_skew_secs,
+            &config.issuer,
+            &config.audience,
+        ) {
             Ok(claims) => {
                 req.extensions_mut().insert(claims);
             }
@@ -113,10 +124,17 @@ fn decode_claims(
     token: &str,
     secret: &str,
     clock_skew_secs: u64,
+    issuer: &str,
+    audience: &str,
 ) -> Result<AuthClaims, jsonwebtoken::errors::Error> {
     let mut validation = Validation::new(Algorithm::HS256);
     validation.validate_exp = true;
     validation.leeway = clock_skew_secs;
+    validation.algorithms = vec![Algorithm::HS256];
+    validation.set_issuer(&[issuer]);
+    validation.set_audience(&[audience]);
+    validation.required_spec_claims =
+        HashSet::from_iter(["sub", "exp", "iat", "iss", "aud"].map(str::to_string));
     let token_data = decode::<AuthClaims>(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),
@@ -128,11 +146,34 @@ fn decode_claims(
             jsonwebtoken::errors::ErrorKind::InvalidToken,
         ));
     }
+    if !token_data.claims.sub.starts_with("github:")
+        || token_data.claims.sub.len() > 255
+        || token_data
+            .claims
+            .name
+            .as_ref()
+            .is_some_and(|name| name.len() > 100)
+        || token_data
+            .claims
+            .avatar_url
+            .as_ref()
+            .is_some_and(|url| url.len() > 2048 || !url.starts_with("https://"))
+    {
+        return Err(jsonwebtoken::errors::Error::from(
+            jsonwebtoken::errors::ErrorKind::InvalidToken,
+        ));
+    }
     Ok(token_data.claims)
 }
 
 fn is_protected_route(method: &axum::http::Method, path: &str) -> bool {
-    method == axum::http::Method::POST && path == "/api/leaderboard"
+    (method == axum::http::Method::POST && path == "/api/leaderboard")
+        || (path == "/api/profile"
+            && matches!(
+                *method,
+                axum::http::Method::GET | axum::http::Method::DELETE
+            ))
+        || (method == axum::http::Method::GET && path == "/api/profile/export")
 }
 
 #[cfg(test)]
@@ -156,6 +197,8 @@ mod tests {
             avatar_url: None,
             iat: now,
             exp: now + 300,
+            iss: "ctf-maze-web".into(),
+            aud: "ctf-maze-api".into(),
         };
         let token = encode(
             &Header::new(Algorithm::HS256),
@@ -163,11 +206,85 @@ mod tests {
             &EncodingKey::from_secret(b"test-secret"),
         )
         .unwrap();
-        assert!(decode_claims(&token, "wrong-secret", 60).is_err());
+        assert!(decode_claims(&token, "wrong-secret", 60, "ctf-maze-web", "ctf-maze-api").is_err());
         assert_eq!(
-            decode_claims(&token, "test-secret", 60).unwrap().sub,
+            decode_claims(&token, "test-secret", 60, "ctf-maze-web", "ctf-maze-api")
+                .unwrap()
+                .sub,
             "github:1"
         );
+        assert!(decode_claims(&token, "test-secret", 60, "wrong", "ctf-maze-api").is_err());
+        assert!(decode_claims(&token, "test-secret", 60, "ctf-maze-web", "wrong").is_err());
+    }
+    #[test]
+    fn claims_reject_wrong_algorithm_expiry_and_future_issue_time() {
+        let now = chrono::Utc::now().timestamp() as usize;
+        let claims = AuthClaims {
+            sub: "github:1".into(),
+            name: None,
+            avatar_url: None,
+            iat: now,
+            exp: now.saturating_sub(120),
+            iss: "ctf-maze-web".into(),
+            aud: "ctf-maze-api".into(),
+        };
+        let expired = encode(
+            &Header::new(Algorithm::HS256),
+            &claims,
+            &EncodingKey::from_secret(b"test-secret"),
+        )
+        .unwrap();
+        assert!(
+            decode_claims(&expired, "test-secret", 60, "ctf-maze-web", "ctf-maze-api").is_err()
+        );
+
+        let future = AuthClaims {
+            iat: now + 61,
+            exp: now + 300,
+            ..claims.clone()
+        };
+        let future = encode(
+            &Header::new(Algorithm::HS256),
+            &future,
+            &EncodingKey::from_secret(b"test-secret"),
+        )
+        .unwrap();
+        assert!(decode_claims(&future, "test-secret", 60, "ctf-maze-web", "ctf-maze-api").is_err());
+
+        let valid = AuthClaims {
+            iat: now,
+            exp: now + 300,
+            ..claims
+        };
+        let wrong_algorithm = encode(
+            &Header::new(Algorithm::HS384),
+            &valid,
+            &EncodingKey::from_secret(b"test-secret"),
+        )
+        .unwrap();
+        assert!(decode_claims(
+            &wrong_algorithm,
+            "test-secret",
+            60,
+            "ctf-maze-web",
+            "ctf-maze-api"
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn claims_require_subject_issuer_audience_and_timestamps() {
+        let now = chrono::Utc::now().timestamp() as usize;
+        let incomplete = serde_json::json!({
+            "exp": now + 300, "iat": now, "iss": "ctf-maze-web", "aud": "ctf-maze-api"
+        });
+        let token = encode(
+            &Header::new(Algorithm::HS256),
+            &incomplete,
+            &EncodingKey::from_secret(b"test-secret"),
+        )
+        .unwrap();
+        assert!(decode_claims(&token, "test-secret", 60, "ctf-maze-web", "ctf-maze-api").is_err());
     }
     #[test]
     fn only_submission_requires_authentication() {
@@ -176,5 +293,10 @@ mod tests {
             "/api/leaderboard"
         ));
         assert!(!is_protected_route(&axum::http::Method::POST, "/api/solve"));
+        assert!(is_protected_route(&axum::http::Method::GET, "/api/profile"));
+        assert!(is_protected_route(
+            &axum::http::Method::DELETE,
+            "/api/profile"
+        ));
     }
 }

@@ -55,7 +55,12 @@ pub fn router(
             "/leaderboard",
             get(handlers::leaderboard).post(handlers::submit_leaderboard),
         )
-        .route("/daily", get(handlers::daily));
+        .route("/daily", get(handlers::daily))
+        .route(
+            "/profile",
+            get(handlers::profile).delete(handlers::delete_profile),
+        )
+        .route("/profile/export", get(handlers::export_profile));
 
     let routes = if trust_proxy {
         tracing::warn!(

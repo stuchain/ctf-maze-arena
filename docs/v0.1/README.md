@@ -42,5 +42,6 @@ Allowed statuses are `not-started`, `in-design`, `ready`, `in-progress`, `blocke
 - Phase 4 — Design system and application shell: `complete`
 - Phase 5 — Maze visualization and replay: `complete`
 - Phase 6 — Algorithm Race: `complete`
-- Current phase: Phase 7 — Identity and community (`ready`)
+- Phase 7 — Identity and community: `complete`
+- Current phase: Phase 8 — Free deployment and operations (`ready`)
 - Product implementation under this roadmap: active

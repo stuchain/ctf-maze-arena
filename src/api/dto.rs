@@ -1,3 +1,4 @@
+use crate::store::LeaderboardEntry;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -13,10 +14,18 @@ pub(super) struct HealthResponse {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct DailyResponse {
+    pub challenge_id: Uuid,
     pub seed: u64,
     pub date: String,
+    pub version: u16,
     pub w: u32,
     pub h: u32,
+    pub algo: String,
+    pub feature_preset: String,
+    pub seconds_until_reset: i64,
+    pub personal_best: Option<LeaderboardEntry>,
+    pub streak: u32,
+    pub completed: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -27,6 +36,8 @@ pub(super) struct GenerateRequest {
     pub algo: String,
     #[serde(default = "default_feature_preset", rename = "featurePreset")]
     pub feature_preset: String,
+    #[serde(default, rename = "dailyChallengeId")]
+    pub daily_challenge_id: Option<Uuid>,
 }
 
 fn default_feature_preset() -> String {
@@ -95,11 +106,27 @@ pub(super) struct LeaderboardSubmitResponse {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct LeaderboardQuery {
-    pub maze_id: String,
+    #[serde(default)]
+    pub maze_id: Option<String>,
+    #[serde(default)]
+    pub daily_date: Option<String>,
+    #[serde(default)]
+    pub race_id: Option<String>,
+    #[serde(default)]
+    pub solver: Option<String>,
+    #[serde(default)]
+    pub scope: Option<String>,
     #[serde(default = "default_limit")]
     pub limit: u32,
     #[serde(default)]
     pub offset: u32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct DeleteProfileResponse {
+    pub deleted: bool,
+    pub leaderboard_policy: &'static str,
 }
 
 fn default_limit() -> u32 {

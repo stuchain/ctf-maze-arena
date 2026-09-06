@@ -14,6 +14,7 @@ pub async fn generate_and_store(
     seed: u64,
     algorithm: &str,
     feature_preset: &str,
+    daily_challenge_id: Option<uuid::Uuid>,
 ) -> Result<(MazeId, Maze), ServiceError> {
     if !(MIN_SIZE..=MAX_SIZE).contains(&width) {
         return Err(ServiceError::InvalidInput(format!(
@@ -50,7 +51,26 @@ pub async fn generate_and_store(
             ))
         }
     }
-    let id = store::store_maze(pool, &maze, seed, algorithm).await?;
+    if let Some(challenge_id) = daily_challenge_id {
+        store::validate_daily_challenge(
+            pool,
+            challenge_id,
+            seed,
+            width,
+            height,
+            algorithm,
+            feature_preset,
+        )
+        .await
+        .map_err(|error| match error {
+            store::StoreError::NotFound => ServiceError::InvalidInput(
+                "dailyChallengeId does not match the immutable challenge definition".into(),
+            ),
+            other => other.into(),
+        })?;
+    }
+    let id =
+        store::store_maze_for_challenge(pool, &maze, seed, algorithm, daily_challenge_id).await?;
     Ok((id, maze))
 }
 

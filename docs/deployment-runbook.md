@@ -24,6 +24,7 @@ The Rust API is shipped as a non-root container and requires PostgreSQL. Phase 8
 | `RATE_LIMIT_EXPENSIVE_PER_SECOND` / `RATE_LIMIT_EXPENSIVE_BURST` | Generate/solve limits. | `5` / `10` | Recommended |
 | `JWT_SECRET` | Shared HMAC secret for web-issued API tokens. | 32+ random characters | Required when auth is enabled |
 | `JWT_CLOCK_SKEW_SECS` | JWT clock tolerance. | `60` | Recommended |
+| `JWT_ISSUER` / `JWT_AUDIENCE` | Exact token origin and recipient; values must match in web and API deployments. | `ctf-maze-web` / `ctf-maze-api` | Recommended |
 | `AUTH_MODE` | `anonymous`, `optional_jwt`, or `jwt`. | `optional_jwt` | Recommended |
 
 Never commit database credentials, OAuth credentials, or JWT secrets. Store them in the hosting provider’s secret manager.
@@ -53,6 +54,11 @@ Terminate HTTPS at the hosting edge. Set `ALLOWED_ORIGINS` to the exact Vercel p
 - Production callback: `https://<vercel-domain>/api/auth/callback/github`
 - The web app signs the stable GitHub provider account ID into short-lived API JWTs. Display names and email addresses are never used as ownership keys.
 - Anonymous solve creation stays available. Leaderboard submission requires a matching authenticated owner.
+- GitHub OAuth requests only `read:user`; it does not request repository or email access.
+
+### Production identity smoke check
+
+Because GitHub OAuth is not exercised by normal CI, verify each production rollout in a disposable account session: sign in through GitHub, confirm `/api/token` yields a 10-minute token whose issuer/audience match the API, start an authenticated solve, submit it once and again (created then duplicate), verify profile/history/achievement and personal leaderboard visibility, export the JSON record, sign out, and confirm anonymous generate/solve/replay still works. Test deletion only with a disposable identity; confirm the public score changes to `Deleted player` while a subsequent sign-in starts an empty profile.
 
 ## Local parity
 

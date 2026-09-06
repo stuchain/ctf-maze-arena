@@ -1,7 +1,7 @@
 'use client';
 
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { Button, Field, Select } from '@/components/ui/Primitives';
 
 export interface GenerateFormParams {
@@ -18,7 +18,10 @@ export interface GenerateFormProps {
   initialParams?: GenerateFormParams;
 }
 
+const subscribeHydration = () => () => {};
+
 export function GenerateForm({ onSubmit, loading, initialParams }: GenerateFormProps) {
+  const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
   const [w, setW] = useState(initialParams?.w ?? 10);
   const [h, setH] = useState(initialParams?.h ?? 10);
   const [seed, setSeed] = useState(() => initialParams?.seed ?? Math.floor(Math.random() * 1e6));
@@ -47,6 +50,7 @@ export function GenerateForm({ onSubmit, loading, initialParams }: GenerateFormP
           aria-describedby="maze-width-input-description"
           min={5}
           max={50}
+          disabled={!hydrated}
           value={w}
           onChange={(e) => setW(Number(e.target.value))}
           className="control"
@@ -62,6 +66,7 @@ export function GenerateForm({ onSubmit, loading, initialParams }: GenerateFormP
           aria-describedby="maze-height-input-description"
           min={5}
           max={50}
+          disabled={!hydrated}
           value={h}
           onChange={(e) => setH(Number(e.target.value))}
           className="control"
@@ -78,6 +83,7 @@ export function GenerateForm({ onSubmit, loading, initialParams }: GenerateFormP
           autoComplete="off"
           aria-describedby="maze-seed-input-description"
           min={0}
+          disabled={!hydrated}
           value={seed}
           onChange={(e) => setSeed(Number(e.target.value))}
           className="control"
@@ -89,6 +95,7 @@ export function GenerateForm({ onSubmit, loading, initialParams }: GenerateFormP
           id="maze-algo-select"
           name="maze-generator"
           autoComplete="off"
+          disabled={!hydrated}
           value={algo}
           onChange={(e) => setAlgo(e.target.value)}
         >
@@ -99,7 +106,7 @@ export function GenerateForm({ onSubmit, loading, initialParams }: GenerateFormP
       </Field>
 
       <Field label="Maze Features" htmlFor="maze-feature-select" hint="Keys adds a deterministic key and locked passage.">
-        <Select id="maze-feature-select" value={featurePreset} onChange={(event) => setFeaturePreset(event.target.value as 'classic' | 'keys')}>
+        <Select id="maze-feature-select" disabled={!hydrated} value={featurePreset} onChange={(event) => setFeaturePreset(event.target.value as 'classic' | 'keys')}>
           <option value="classic">Classic passages</option>
           <option value="keys">Key &amp; locked passage</option>
         </Select>
@@ -108,6 +115,7 @@ export function GenerateForm({ onSubmit, loading, initialParams }: GenerateFormP
       <Button
         type="submit"
         loading={loading}
+        disabled={!hydrated}
         className="button--full"
         data-testid="generate-button"
       >

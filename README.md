@@ -1,7 +1,7 @@
 # ctf-maze-arena
 
 A maze playground with a Next.js frontend and Rust (Axum) API.  
-Generate mazes, run solvers, stream solve progress, and view replays/leaderboards.
+Generate mazes, race solvers, stream solve progress, share replays, and optionally keep GitHub-backed daily challenge history, rankings, and achievements.
 
 ## Stack
 
@@ -58,6 +58,8 @@ Run the canonical repository checks from PowerShell with `./scripts/verify.ps1`.
   - `optional_jwt`
   - `jwt` (requires a JWT for protected identity operations; anonymous solves remain available)
 - Quick rollback: set `AUTH_MODE=anonymous`
+- JWT boundaries validate fixed algorithm, issuer, audience, expiry, issue time, and required claims.
+- GitHub requests only the public `read:user` scope. Profile export and deletion are available in the identity panel; deletion anonymizes retained public leaderboard history.
 
 ## Useful docs
 

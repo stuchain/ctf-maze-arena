@@ -55,6 +55,8 @@ fn build_app(
                 secret: Some(JWT_SECRET.into()),
                 clock_skew_secs: 60,
                 auth_mode: AuthMode::OptionalJwt,
+                issuer: "ctf-maze-web".into(),
+                audience: "ctf-maze-api".into(),
             },
             api::jwt_claims_middleware,
         ))
@@ -110,6 +112,8 @@ fn token(subject: &str) -> String {
             avatar_url: Some("https://example.test/avatar.png".into()),
             iat: now,
             exp: now + 300,
+            iss: "ctf-maze-web".into(),
+            aud: "ctf-maze-api".into(),
         },
         &EncodingKey::from_secret(JWT_SECRET.as_bytes()),
     )
@@ -312,6 +316,7 @@ async fn phase_03_realtime_cancellation_limits_and_shutdown_contracts() {
         solver: Arc::new(CancellableSolver),
         request_id: "owned-cancellation",
         identity: Some(&owner),
+        race_id: None,
     })
     .await
     .unwrap();
@@ -353,6 +358,7 @@ async fn phase_03_realtime_cancellation_limits_and_shutdown_contracts() {
         solver: Arc::new(CancellableSolver),
         request_id: "queued-first",
         identity: None,
+        race_id: None,
     })
     .await
     .unwrap();
@@ -371,6 +377,7 @@ async fn phase_03_realtime_cancellation_limits_and_shutdown_contracts() {
         solver: Arc::new(CancellableSolver),
         request_id: "queued-second",
         identity: None,
+        race_id: None,
     })
     .await;
     assert!(matches!(
@@ -395,12 +402,206 @@ async fn phase_03_realtime_cancellation_limits_and_shutdown_contracts() {
         solver: Arc::new(CancellableSolver),
         request_id: "after-shutdown",
         identity: None,
+        race_id: None,
     })
     .await;
     assert!(matches!(
         rejected_shutdown,
         Err(ctf_maze_arena::services::ServiceError::ShuttingDown)
     ));
+}
+
+#[tokio::test]
+async fn phase_07_identity_daily_achievements_and_deletion_contracts() {
+    let database_url = match std::env::var("TEST_DATABASE_URL") {
+        Ok(url) => url,
+        Err(_) => {
+            eprintln!("TEST_DATABASE_URL is not set; skipping PostgreSQL integration test");
+            return;
+        }
+    };
+    assert!(database_url.contains("ctf_maze_test"));
+    let pool = PgPoolOptions::new()
+        .max_connections(8)
+        .connect(&database_url)
+        .await
+        .unwrap();
+    store::migrate(&pool).await.unwrap();
+    let (app, _) = build_app(pool.clone(), solve::default_registry(), 1);
+    let subject = format!("github:phase07-{}", Uuid::new_v4());
+    let owner_token = token(&subject);
+
+    assert_eq!(
+        call(&app, request("GET", "/api/profile", None, None))
+            .await
+            .0,
+        StatusCode::UNAUTHORIZED
+    );
+    let (status, daily) = call(&app, request("GET", "/api/daily", None, Some(&owner_token))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(daily["version"], 1);
+    assert!(daily["secondsUntilReset"].as_i64().unwrap() <= 86_400);
+    assert_eq!(daily["completed"], false);
+
+    let challenge_id = daily["challengeId"].as_str().unwrap();
+    let (status, generated) = call(
+        &app,
+        request(
+            "POST",
+            "/api/maze/generate",
+            Some(json!({
+                "w": daily["w"], "h": daily["h"], "seed": daily["seed"],
+                "algo": daily["algo"], "featurePreset": daily["featurePreset"],
+                "dailyChallengeId": challenge_id,
+            })),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let maze_id = generated["mazeId"].as_str().unwrap();
+    let (status, invalid_daily) = call(&app, request(
+        "POST", "/api/maze/generate",
+        Some(json!({"w": 15, "h": 15, "seed": 7, "algo": "KRUSKAL", "featurePreset": "classic", "dailyChallengeId": challenge_id})), None,
+    )).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(invalid_daily["error"]["code"], "invalid_request");
+
+    let (status, solve_body) = call(
+        &app,
+        request(
+            "POST",
+            "/api/solve",
+            Some(json!({"mazeId": maze_id, "solver": "ASTAR"})),
+            Some(&owner_token),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let run_id = Uuid::parse_str(solve_body["runId"].as_str().unwrap()).unwrap();
+    wait_for_status(&pool, run_id, RunStatus::Completed).await;
+    assert_eq!(
+        call(
+            &app,
+            request(
+                "POST",
+                "/api/leaderboard",
+                Some(json!({"runId": run_id})),
+                Some(&owner_token),
+            )
+        )
+        .await
+        .0,
+        StatusCode::CREATED
+    );
+    assert_eq!(
+        call(
+            &app,
+            request(
+                "POST",
+                "/api/leaderboard",
+                Some(json!({"runId": run_id})),
+                Some(&owner_token),
+            )
+        )
+        .await
+        .1["duplicate"],
+        true
+    );
+
+    let (status, profile) = call(
+        &app,
+        request("GET", "/api/profile", None, Some(&owner_token)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(profile["totalSubmissions"], 1);
+    assert_eq!(profile["history"][0]["runId"], run_id.to_string());
+    let achievement_keys = profile["achievements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value["key"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert!(achievement_keys.contains(&"first_finish"));
+    assert!(achievement_keys.contains(&"astar_optimal"));
+    assert!(achievement_keys.contains(&"daily_challenger"));
+    let award_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM user_achievements WHERE run_id = $1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(award_count as usize, achievement_keys.len());
+
+    let (_, personalized_daily) =
+        call(&app, request("GET", "/api/daily", None, Some(&owner_token))).await;
+    assert_eq!(personalized_daily["completed"], true);
+    assert_eq!(
+        personalized_daily["personalBest"]["runId"],
+        run_id.to_string()
+    );
+    assert_eq!(personalized_daily["streak"], 1);
+    let daily_date = daily["date"].as_str().unwrap();
+    let filter_uri = format!("/api/leaderboard?dailyDate={daily_date}&solver=ASTAR&scope=personal");
+    let (status, filtered) =
+        call(&app, request("GET", &filter_uri, None, Some(&owner_token))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(filtered
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["runId"] == run_id.to_string() && entry["isPersonal"] == true));
+
+    let original = store::get_or_create_daily_challenge(
+        &pool,
+        chrono::NaiveDate::parse_from_str(daily_date, "%Y-%m-%d").unwrap(),
+        1,
+        999,
+    )
+    .await
+    .unwrap();
+    assert_eq!(original.seed, daily["seed"].as_u64().unwrap());
+    let next_version =
+        store::get_or_create_daily_challenge(&pool, original.date, 2, original.seed + 1)
+            .await
+            .unwrap();
+    assert_ne!(original.id, next_version.id);
+    assert_ne!(original.version, next_version.version);
+
+    assert_eq!(
+        call(
+            &app,
+            request("GET", "/api/profile/export", None, Some(&owner_token))
+        )
+        .await
+        .1["totalSubmissions"],
+        1
+    );
+    let (status, deleted) = call(
+        &app,
+        request("DELETE", "/api/profile", None, Some(&owner_token)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(deleted["deleted"], true);
+    let public_uri = format!("/api/leaderboard?dailyDate={daily_date}");
+    let (_, public_board) = call(&app, request("GET", &public_uri, None, None)).await;
+    let retained = public_board
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["runId"] == run_id.to_string())
+        .unwrap();
+    assert_eq!(retained["displayName"], "Deleted player");
+    assert!(retained["avatarUrl"].is_null());
+    let (_, recreated) = call(
+        &app,
+        request("GET", "/api/profile", None, Some(&owner_token)),
+    )
+    .await;
+    assert_eq!(recreated["totalSubmissions"], 0);
+    assert!(recreated["achievements"].as_array().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -700,6 +901,10 @@ async fn phase_02_postgres_http_and_lifecycle_contracts() {
         first.iter().map(|entry| entry.run_id).collect::<Vec<_>>(),
         second.iter().map(|entry| entry.run_id).collect::<Vec<_>>()
     );
+    let queued_rank = first.iter().find(|entry| entry.run_id == queued).unwrap();
+    let tie_rank = first.iter().find(|entry| entry.run_id == tie).unwrap();
+    assert!(queued_rank.tied && tie_rank.tied);
+    assert_eq!(queued_rank.rank, tie_rank.rank);
     assert_eq!(
         call(
             &app,
@@ -775,6 +980,7 @@ async fn phase_02_postgres_http_and_lifecycle_contracts() {
         solver: Arc::clone(&slow),
         request_id: "bounded-a",
         identity: None,
+        race_id: None,
     })
     .await
     .unwrap();
@@ -793,6 +999,7 @@ async fn phase_02_postgres_http_and_lifecycle_contracts() {
         solver: slow,
         request_id: "bounded-b",
         identity: None,
+        race_id: None,
     })
     .await
     .unwrap();

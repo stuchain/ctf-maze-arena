@@ -77,6 +77,11 @@ impl ApiError {
                 "active_solve_limit",
                 "Wait for your active solve to finish before starting another.".into(),
             ),
+            ServiceError::SubmissionLimit => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "submission_limit",
+                "The daily submission limit has been reached. Try again later.".into(),
+            ),
             ServiceError::ShuttingDown => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "shutting_down",

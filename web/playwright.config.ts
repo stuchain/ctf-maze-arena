@@ -10,6 +10,8 @@ export default defineConfig({
     timeout: 10_000,
   },
   fullyParallel: false,
+  // Browser flows share one rate-limited API identity and intentionally run in sequence.
+  workers: 1,
   retries: isCi ? 1 : 0,
   reporter: isCi ? [['line'], ['html', { open: 'never' }]] : 'list',
   use: {

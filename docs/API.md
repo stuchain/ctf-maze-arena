@@ -8,11 +8,11 @@ All REST routes below are under `/api`.
 
 - The web app signs users in with GitHub via NextAuth.
 - `GET /api/token` (web route) mints short-lived API JWTs (10 minute TTL) from the authenticated web session.
-- API JWT middleware validates `HS256` signature, `exp`, and `iat` with `JWT_CLOCK_SKEW_SECS` tolerance.
+- API JWT middleware accepts only `HS256` and validates `sub`, `exp`, `iat`, `iss`, and `aud` with `JWT_CLOCK_SKEW_SECS` tolerance. Issuer and audience default to `ctf-maze-web` and `ctf-maze-api` and can be set with `JWT_ISSUER` / `JWT_AUDIENCE` in both services.
 - `AUTH_MODE` controls enforcement:
   - `anonymous`: no JWT required.
   - `optional_jwt`: JWT accepted when present.
-  - `jwt`: JWT required on protected identity routes (`POST /api/leaderboard`). Anonymous solves remain available.
+  - `jwt`: JWT required on protected identity routes (`POST /api/leaderboard`, profile/export/deletion). Anonymous solves remain available.
 
 ## GET /api/health
 
@@ -42,7 +42,8 @@ Returns `201 Created`.
   "h": 10,
   "seed": 42,
   "algo": "KRUSKAL",
-  "featurePreset": "classic"
+  "featurePreset": "classic",
+  "dailyChallengeId": "optional-versioned-challenge-uuid"
 }
 ```
 
@@ -207,27 +208,31 @@ Returns the versioned replay JSON (camelCase): `protocolVersion`, `mazeId`, `sol
 
 Returns durable run status, timestamps, safe failure code, and server-computed metrics when complete.
 
-## GET /api/leaderboard?mazeId=...
+## GET /api/leaderboard
 
-Query: `mazeId` (camelCase) = maze UUID, `limit` = 1–100 (default 50), and `offset` = 0–10000.
+One selector is required: `mazeId`, `dailyDate=YYYY-MM-DD`, or `raceId`. Optional filters are `solver`, `scope=all|personal`, `limit` = 1–100 (default 50), and `offset` = 0–10000. Personal scope requires a valid Bearer token.
 
 **Response:** JSON array of entries:
 
 ```json
 [
   {
+    "rank": 1,
+    "tied": false,
     "runId": "...",
     "solver": "ASTAR",
     "cost": 10,
     "ms": 2,
     "visited": 50,
     "displayName": "octocat",
-    "avatarUrl": "https://avatars.githubusercontent.com/..."
+    "avatarUrl": "https://avatars.githubusercontent.com/...",
+    "acceptedAt": "2026-09-05T12:00:00Z",
+    "isPersonal": true
   }
 ]
 ```
 
-Only explicitly accepted submissions are returned. Ordering is stable: cost, time, visited, acceptance time, then run ID.
+Only explicitly accepted submissions are returned. Ordering is stable: cost, time, visited, acceptance time, then run ID. Rank ties are based on equal cost, runtime, and visited metrics. Submissions are limited to 100 per identity in a rolling 24-hour window; duplicates remain idempotent.
 
 ## POST /api/leaderboard
 
@@ -271,11 +276,27 @@ Returns the UTC daily challenge parameters (camelCase):
 
 ```json
 {
+  "challengeId": "uuid-string",
   "seed": 1234567890,
   "date": "2026-04-04",
+  "version": 1,
   "w": 15,
-  "h": 15
+  "h": 15,
+  "algo": "KRUSKAL",
+  "featurePreset": "classic",
+  "secondsUntilReset": 43199,
+  "personalBest": null,
+  "streak": 0,
+  "completed": false
 }
 ```
 
-The `seed` is derived from the date string; same calendar day (UTC) yields the same seed.
+The definition is stored by UTC date and version. Passing its `challengeId` back to maze generation binds the maze only when every immutable parameter matches. With optional authentication, the response includes the caller's accepted personal best, completion state, and consecutive UTC-day streak.
+
+## Profile, export, and deletion
+
+- `GET /api/profile` upserts the signed-in GitHub identity and returns public profile fields, submission count, streak, versioned server achievements, and the 50 most recent accepted runs.
+- `GET /api/profile/export` returns the same portable JSON record for download.
+- `DELETE /api/profile` removes achievements and private run ownership, clears the public name/avatar, and rotates the provider subject. Accepted leaderboard rows remain attached only to an anonymized `Deleted player` record so historical ranking integrity is preserved.
+
+All three routes require a valid Bearer token. The GitHub provider requests only `read:user`; anonymous play, solving, replays, and non-personal leaderboards remain available without sign-in.

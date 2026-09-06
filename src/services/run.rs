@@ -104,6 +104,7 @@ pub struct StartRun<'a> {
     pub solver: Arc<dyn Solver>,
     pub request_id: &'a str,
     pub identity: Option<&'a Identity>,
+    pub race_id: Option<uuid::Uuid>,
 }
 
 pub async fn start(input: StartRun<'_>) -> Result<RunId, ServiceError> {
@@ -145,12 +146,13 @@ pub async fn start_race(inputs: Vec<StartRun<'_>>) -> Result<Vec<RunId>, Service
         .iter()
         .map(|input| input.solver_name.as_str())
         .collect::<Vec<_>>();
-    let run_ids = store::create_runs(
+    let run_ids = store::create_runs_with_race(
         first.pool,
         first.maze_id,
         &solver_names,
         first.request_id,
         first.identity,
+        first.race_id,
     )
     .await?;
     for (input, run_id) in inputs.into_iter().zip(run_ids.iter().copied()) {

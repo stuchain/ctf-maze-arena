@@ -7,6 +7,7 @@ const githubProvider = serverEnv.GITHUB_ID && serverEnv.GITHUB_SECRET
       GitHubProvider({
         clientId: serverEnv.GITHUB_ID,
         clientSecret: serverEnv.GITHUB_SECRET,
+        authorization: { params: { scope: 'read:user' } },
       }),
     ]
   : [];

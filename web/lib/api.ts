@@ -77,11 +77,20 @@ export const generateResponseSchema = z.object({
 });
 
 export const dailyResponseSchema = z.object({
+  challengeId: z.string().uuid(),
   seed: z.coerce.number().int().nonnegative(),
   date: z.string(),
+  version: z.number().int().positive(),
   w: z.coerce.number().int().positive(),
   h: z.coerce.number().int().positive(),
+  algo: z.enum(['KRUSKAL', 'PRIM', 'DFS']),
+  featurePreset: z.enum(['classic', 'keys']),
+  secondsUntilReset: z.number().int().nonnegative(),
+  personalBest: z.lazy(() => leaderboardEntrySchema).nullable(),
+  streak: z.number().int().nonnegative(),
+  completed: z.boolean(),
 });
+export type DailyChallenge = z.infer<typeof dailyResponseSchema>;
 
 export const solveResponseSchema = z.object({ runId: z.string().min(1) });
 
@@ -105,6 +114,8 @@ export const tokenResponseSchema = z.object({
 });
 
 export const leaderboardEntrySchema = z.object({
+  rank: z.number().int().nonnegative(),
+  tied: z.boolean(),
   runId: z.string(),
   solver: z.string(),
   cost: z.number().nonnegative(),
@@ -112,7 +123,37 @@ export const leaderboardEntrySchema = z.object({
   visited: z.number().nonnegative(),
   displayName: z.string().nullable().optional(),
   avatarUrl: z.string().url().nullable().optional(),
+  acceptedAt: z.string().datetime(),
+  isPersonal: z.boolean(),
 });
 
 export const leaderboardResponseSchema = z.array(leaderboardEntrySchema);
 export type LeaderboardEntry = z.infer<typeof leaderboardEntrySchema>;
+
+export const achievementAwardSchema = z.object({
+  key: z.string(),
+  version: z.number().int().positive(),
+  name: z.string(),
+  description: z.string(),
+  awardedAt: z.string().datetime(),
+});
+
+export const profileSchema = z.object({
+  providerSubject: z.string(),
+  displayName: z.string().nullable().optional(),
+  avatarUrl: z.string().url().nullable().optional(),
+  totalSubmissions: z.number().int().nonnegative(),
+  dailyStreak: z.number().int().nonnegative(),
+  achievements: z.array(achievementAwardSchema),
+  history: z.array(z.object({
+    runId: z.string().uuid(), solver: z.string(), cost: z.number().nonnegative(),
+    ms: z.number().nonnegative(), visited: z.number().nonnegative(),
+    acceptedAt: z.string().datetime(), challengeDate: z.string().nullable(),
+  })),
+});
+export type UserProfile = z.infer<typeof profileSchema>;
+
+export const deleteProfileResponseSchema = z.object({
+  deleted: z.boolean(),
+  leaderboardPolicy: z.string(),
+});

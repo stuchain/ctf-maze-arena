@@ -1,6 +1,6 @@
 # Phase 7 — Identity and community
 
-**Status:** not-started
+**Status:** complete
 
 **Depends on:** Phases 2, 4, and 6
 
@@ -50,14 +50,14 @@ Store only provider subject, public display name/avatar as needed, and product r
 
 ## Work checklist
 
-- [ ] Harden JWT issuer/audience/algorithm configuration and auth error behavior.
-- [ ] Implement user upsert/profile and authenticated ownership binding.
-- [ ] Connect explicit score submission to the corrected leaderboard.
-- [ ] Implement versioned daily challenges, personal best, and streak.
-- [ ] Implement server-backed versioned achievements.
-- [ ] Add leaderboard filters, pagination, ties, empty/loading/error states.
-- [ ] Add replay/result share metadata and signed-in/out conversion flow.
-- [ ] Add privacy copy, data export/deletion path, and abuse limits.
+- [x] Harden JWT issuer/audience/algorithm configuration and auth error behavior.
+- [x] Implement user upsert/profile and authenticated ownership binding.
+- [x] Connect explicit score submission to the corrected leaderboard.
+- [x] Implement versioned daily challenges, personal best, and streak.
+- [x] Implement server-backed versioned achievements.
+- [x] Add leaderboard filters, pagination, ties, empty/loading/error states.
+- [x] Add replay/result share metadata and signed-in/out conversion flow.
+- [x] Add privacy copy, data export/deletion path, and abuse limits.
 
 ## Test strategy
 
@@ -76,20 +76,23 @@ Store only provider subject, public display name/avatar as needed, and product r
 
 ## Exit criteria
 
-- [ ] Anonymous visitors complete every core learning/play flow.
-- [ ] GitHub identity reliably enables only authorized persistent features.
-- [ ] Leaderboards contain valid, unique, server-authoritative submissions.
-- [ ] Daily challenge history and achievements are durable and versioned.
-- [ ] Privacy, deletion, abuse, and empty/error behavior are documented and verified.
+- [x] Anonymous visitors complete every core learning/play flow.
+- [x] GitHub identity reliably enables only authorized persistent features.
+- [x] Leaderboards contain valid, unique, server-authoritative submissions.
+- [x] Daily challenge history and achievements are durable and versioned.
+- [x] Privacy, deletion, abuse, and empty/error behavior are documented and verified.
 
 ## Verification record
 
 | Date | Change | Evidence |
 |---|---|---|
-| — | Not implemented | — |
+| 2026-09-06 | Identity, community persistence, UI, and privacy lifecycle | `./scripts/verify.ps1`; PostgreSQL integration coverage for ownership, immutable daily versions, achievement idempotency, filtered rankings, export, deletion, and anonymized retention; Playwright community/accessibility flows. |
 
 ## Decision and deviation log
 
 | Date | Decision or deviation | Consequence |
 |---|---|---|
 | 2026-09-02 | GitHub sign-in is optional for play and required for persistent community features. | Core routes and UI must always preserve an anonymous path. |
+| 2026-09-06 | Daily definitions are immutable rows keyed by UTC date and version; generated mazes must match the referenced definition exactly. | Algorithm/config changes create a new version without rewriting historical challenges. |
+| 2026-09-06 | Achievement version 1 is awarded only during first accepted authoritative submission and uses a composite uniqueness key. | Duplicate submissions cannot duplicate awards; legacy browser awards remain visibly local only. |
+| 2026-09-06 | Deletion anonymizes accepted public history and removes private ownership/awards instead of deleting ranked facts. | Ranking integrity survives deletion without retaining the GitHub subject, name, or avatar. |

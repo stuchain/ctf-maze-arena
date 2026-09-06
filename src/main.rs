@@ -62,6 +62,8 @@ struct AuthConfig {
     jwt_secret: Option<String>,
     clock_skew_secs: u64,
     mode: api::AuthMode,
+    issuer: String,
+    audience: String,
 }
 
 impl AuthConfig {
@@ -74,6 +76,8 @@ impl AuthConfig {
             .filter(|v| !v.is_empty());
         let clock_skew_secs = parse_u64_env("JWT_CLOCK_SKEW_SECS", Self::DEFAULT_CLOCK_SKEW_SECS);
         let mode = parse_auth_mode_env(std::env::var("AUTH_MODE").ok().as_deref());
+        let issuer = non_empty_env("JWT_ISSUER", "ctf-maze-web");
+        let audience = non_empty_env("JWT_AUDIENCE", "ctf-maze-api");
 
         validate_jwt_secret(mode, jwt_secret.as_deref())?;
 
@@ -81,6 +85,8 @@ impl AuthConfig {
             jwt_secret,
             clock_skew_secs,
             mode,
+            issuer,
+            audience,
         })
     }
 }
@@ -204,6 +210,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             secret: auth_config.jwt_secret.clone(),
             clock_skew_secs: auth_config.clock_skew_secs,
             auth_mode: auth_config.mode,
+            issuer: auth_config.issuer.clone(),
+            audience: auth_config.audience.clone(),
         },
         api::jwt_claims_middleware,
     ))
@@ -374,6 +382,14 @@ fn parse_auth_mode_env(value: Option<&str>) -> api::AuthMode {
         }
         _ => api::AuthMode::Anonymous,
     }
+}
+
+fn non_empty_env(key: &str, default: &str) -> String {
+    std::env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| default.to_string())
 }
 
 fn validate_jwt_secret(mode: api::AuthMode, secret: Option<&str>) -> Result<(), ConfigError> {
