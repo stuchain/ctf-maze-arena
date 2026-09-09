@@ -16,7 +16,7 @@ rand = "0.8"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "migrate", "macros", "uuid", "chrono", "json"] }
 dotenvy = "0.15"
 uuid = { version = "1", features = ["v4", "serde"] }
-tower-http = { version = "0.5", features = ["cors", "set-header", "trace"] }
+tower-http = { version = "0.7", features = ["cors", "set-header", "trace"] }
 chrono = { version = "0.4", features = ["serde"] }
 tower_governor = "0.7"
 jsonwebtoken = "9"
