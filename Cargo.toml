@@ -18,7 +18,7 @@ dotenvy = "0.15"
 uuid = { version = "1", features = ["v4", "serde"] }
 tower-http = { version = "0.5", features = ["cors", "set-header", "trace"] }
 chrono = { version = "0.4", features = ["serde"] }
-tower_governor = "0.7"
+tower_governor = "0.8"
 jsonwebtoken = "9"
 thiserror = "2"
 
